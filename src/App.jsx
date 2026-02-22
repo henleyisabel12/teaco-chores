@@ -236,15 +236,22 @@ export default function App() {
           transform: isDragging ? "scale(1.01)" : "scale(1)",
           transition:"background 0.1s, border 0.1s, transform 0.1s",
           userSelect:"none",
+          WebkitUserSelect:"none",
         }}>
         {/* Drag handle — only shown in today view when dragHandlers provided */}
         {dragHandlers && (
           <div
             {...dragHandlers(chore.id)}
             style={{
-              width:16, flexShrink:0, marginTop:2, cursor:"grab",
-              display:"flex", flexDirection:"column", gap:2.5, paddingTop:2,
-              opacity: 0.3,
+              width:20, flexShrink:0, marginTop:0, cursor:"grab",
+              display:"flex", flexDirection:"column", justifyContent:"center",
+              gap:3, padding:"4px 2px",
+              opacity: isDragging ? 0.9 : 0.25,
+              touchAction:"none",
+              userSelect:"none",
+              WebkitUserSelect:"none",
+              transition:"opacity 0.15s",
+              alignSelf:"stretch",
             }}>
             {[0,1,2].map(i=><div key={i} style={{height:1.5,background:"#fff",borderRadius:1}}/>)}
           </div>
@@ -300,22 +307,9 @@ export default function App() {
   const dragId = useRef(null);
   const dragListRef = useRef([]);
 
-  const makeDragHandlers = (choreList) => (id) => ({
-    onTouchStart: (e) => {
-      longPressTimer.current = setTimeout(() => {
-        dragId.current = id;
-        dragListRef.current = choreList.map(c => c.id);
-        setDragState({id, overId: id});
-        if (navigator.vibrate) navigator.vibrate(30);
-        // Attach non-passive touchmove to allow preventDefault (stops scroll during drag)
-        document.addEventListener("touchmove", handleTouchMove, {passive: false});
-        document.addEventListener("touchend", handleTouchEnd);
-      }, 400);
-    },
-    onTouchEnd: () => clearTimeout(longPressTimer.current),
-  });
-
-  const handleTouchMove = (e) => {
+  // ── Drag to reorder ──────────────────────────────────────────────────────
+  // handleTouchMove/End are stable refs so they can be added/removed as listeners
+  const handleTouchMove = useCallback((e) => {
     if (!dragId.current) return;
     e.preventDefault();
     const touch = e.touches[0];
@@ -325,25 +319,46 @@ export default function App() {
     if (overId && overId !== dragId.current && dragListRef.current.includes(overId)) {
       const list = [...dragListRef.current];
       const from = list.indexOf(dragId.current);
-      const to = list.indexOf(overId);
+      const to   = list.indexOf(overId);
       if (from !== -1 && to !== -1) {
         list.splice(from, 1);
         list.splice(to, 0, dragId.current);
         dragListRef.current = list;
-        setDragState({id: dragId.current, overId});
+        setDragState(s => ({...s, overId}));
       }
     }
-  };
+  }, []);
 
-  const handleTouchEnd = () => {
-    document.removeEventListener("touchmove", handleTouchMove);
-    document.removeEventListener("touchend", handleTouchEnd);
+  const handleTouchEnd = useCallback(() => {
+    document.removeEventListener("touchmove", handleTouchMove, {passive:false});
+    document.removeEventListener("touchend",  handleTouchEnd);
     if (dragId.current) {
       reorderChores(dragListRef.current);
       dragId.current = null;
       setDragState(null);
     }
-  };
+  }, []);
+
+  // Returns event props to spread onto each drag handle element
+  const makeDragHandlers = useCallback((choreList) => (id) => ({
+    onTouchStart: (e) => {
+      // Prevent text selection immediately
+      e.preventDefault();
+      const timer = setTimeout(() => {
+        dragId.current = id;
+        dragListRef.current = choreList.map(c => c.id);
+        setDragState({id, overId: id});
+        if (navigator.vibrate) navigator.vibrate(40);
+        document.addEventListener("touchmove", handleTouchMove, {passive: false});
+        document.addEventListener("touchend",  handleTouchEnd);
+      }, 350);
+      longPressTimer.current = timer;
+    },
+    onTouchEnd:   () => clearTimeout(longPressTimer.current),
+    onTouchMove:  () => { if (!dragId.current) clearTimeout(longPressTimer.current); },
+    // Prevent context menu (iOS shows it on long press)
+    onContextMenu: (e) => e.preventDefault(),
+  }), [handleTouchMove, handleTouchEnd]);
 
     return (
       <div style={{paddingBottom:60}}>
