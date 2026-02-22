@@ -53,7 +53,7 @@ export default function App() {
   const [collapsedFreqs, setCollapsedFreqs] = useState({});
   const [synced,       setSynced]      = useState(false);
   const [sortOrder,    setSortOrder]   = useState({});  // {choreId: number}
-  const [reorderMode,  setReorderMode] = useState(false);
+  const [dragState,    setDragState]   = useState(null); // {id, overId}
   const scheduleRef   = useRef(DEFAULT_SCHEDULE);
   const freqKeyRef = useRef(null);
 
@@ -146,18 +146,10 @@ export default function App() {
     setCatModal(false);
   };
 
-  const moveChore = (choreId, direction, choreList) => {
-    // choreList is the ordered list of chores currently visible in that group
-    const ids = choreList.map(c => c.id);
-    const idx = ids.indexOf(choreId);
-    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= ids.length) return;
-    // Build a sortOrder map from current positions, then swap
-    const currentOrder = {};
-    ids.forEach((id, i) => { currentOrder[id] = sortOrder[id] ?? i * 10; });
-    const aVal = currentOrder[ids[idx]];
-    const bVal = currentOrder[ids[swapIdx]];
-    const next = {...sortOrder, [ids[idx]]: bVal, [ids[swapIdx]]: aVal};
+  const reorderChores = (orderedIds) => {
+    // Assign sort values based on position in the new order
+    const next = {...sortOrder};
+    orderedIds.forEach((id, i) => { next[id] = i * 10; });
     setSortOrder(next);
     writeData("sortOrder", next);
   };
@@ -221,23 +213,42 @@ export default function App() {
     </div>
   );
 
-  const ChoreRow = ({chore, date, small, onMoveUp, onMoveDown}) => {
+  const ChoreRow = ({chore, date, small, dragHandlers}) => {
     const done = isCompletedOnDate(chore, date, completions);
     const completion = completions[chore.id];
     const completedByUser = done && completion ? users.find(u=>u.id===completion.user) : null;
     const freqCol = FREQ_COLOR[chore.freq] || "#aaa";
     const cats = getCats(chore);
     const timeIcon = chore.timeOfDay && chore.timeOfDay!=="anytime" ? TIME_ICON[chore.timeOfDay] : null;
+    const isDragging = dragState?.id === chore.id;
+    const isOver = dragState?.overId === chore.id;
 
     return (
-      <div style={{
-        display:"flex", alignItems:"flex-start", gap:8,
-        padding: small ? "6px 8px" : "8px 11px",
-        borderRadius:9, marginBottom:3,
-        background: done ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.05)",
-        border:`1px solid ${done?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.09)"}`,
-        opacity: done ? 0.5 : 1, transition:"all 0.15s",
-      }}>
+      <div
+        data-choreid={chore.id}
+        style={{
+          display:"flex", alignItems:"flex-start", gap:8,
+          padding: small ? "6px 8px" : "8px 11px",
+          borderRadius:9, marginBottom:3,
+          background: isDragging ? "rgba(244,162,97,0.15)" : isOver ? "rgba(255,255,255,0.09)" : done ? "rgba(255,255,255,0.02)" : "rgba(255,255,255,0.05)",
+          border:`1px solid ${isDragging?"rgba(244,162,97,0.5)":isOver?"rgba(255,255,255,0.2)":done?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.09)"}`,
+          opacity: done ? 0.5 : 1,
+          transform: isDragging ? "scale(1.01)" : "scale(1)",
+          transition:"background 0.1s, border 0.1s, transform 0.1s",
+          userSelect:"none",
+        }}>
+        {/* Drag handle — only shown in today view when dragHandlers provided */}
+        {dragHandlers && (
+          <div
+            {...dragHandlers(chore.id)}
+            style={{
+              width:16, flexShrink:0, marginTop:2, cursor:"grab",
+              display:"flex", flexDirection:"column", gap:2.5, paddingTop:2,
+              opacity: 0.3,
+            }}>
+            {[0,1,2].map(i=><div key={i} style={{height:1.5,background:"#fff",borderRadius:1}}/>)}
+          </div>
+        )}
         {/* Checkbox */}
         <div onClick={()=>toggleChore(chore.id,date)} style={{
           width:18, height:18, borderRadius:5, flexShrink:0, marginTop:1, cursor:"pointer",
@@ -260,7 +271,6 @@ export default function App() {
             color: done?"rgba(255,255,255,0.28)":"rgba(255,255,255,0.82)",
             lineHeight:1.45, textDecoration: done?"line-through":"none",
           }}>{chore.task}</div>
-          {/* Multi-cat tags + time badge */}
           <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:3,alignItems:"center"}}>
             {cats.length > 1 && cats.slice(1).map(c=>(
               <span key={c} style={{
@@ -272,98 +282,128 @@ export default function App() {
             {timeIcon && <span style={{fontSize:10}}>{timeIcon}</span>}
           </div>
         </div>
-        {/* Reorder arrows */}
-        {reorderMode && (
-          <div style={{display:"flex",flexDirection:"column",gap:1,flexShrink:0,marginTop:1}}>
-            <button onClick={onMoveUp} style={{
-              all:"unset",cursor:onMoveUp?"pointer":"default",fontSize:10,lineHeight:1,
-              color:onMoveUp?"rgba(255,255,255,0.5)":"rgba(255,255,255,0.1)",padding:"1px 3px",
-            }}>▲</button>
-            <button onClick={onMoveDown} style={{
-              all:"unset",cursor:onMoveDown?"pointer":"default",fontSize:10,lineHeight:1,
-              color:onMoveDown?"rgba(255,255,255,0.5)":"rgba(255,255,255,0.1)",padding:"1px 3px",
-            }}>▼</button>
-          </div>
-        )}
         {/* Edit */}
-        {!reorderMode && <button onClick={()=>setEditModal({chore,date})} style={{
+        <button onClick={()=>setEditModal({chore,date})} style={{
           all:"unset", cursor:"pointer", padding:"1px 5px", fontSize:13,
           color:"rgba(255,255,255,0.18)", flexShrink:0, marginTop:1, transition:"color 0.15s",
         }}
           onMouseOver={e=>e.currentTarget.style.color="rgba(255,255,255,0.6)"}
           onMouseOut={e=>e.currentTarget.style.color="rgba(255,255,255,0.18)"}
-        >···</button>}
+        >···</button>
       </div>
     );
   };
 
   // ── VIEWS ──────────────────────────────────────────────────────────────────
-  const TodayView = () => (
-    <div style={{paddingBottom:60}}>
-      {/* Progress */}
-      <div style={{background:"rgba(255,255,255,0.04)",borderRadius:14,padding:"15px 18px",marginBottom:20,border:"1px solid rgba(255,255,255,0.07)"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:9}}>
-          <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:18,color:"#f5f0e8"}}>{DAYS_FULL[today.getDay()]}, {MONTHS[today.getMonth()]} {today.getDate()}</span>
-          <span style={{fontFamily:"monospace",fontSize:12,color:pct===100?"#7ECFC0":"#F4A261",fontWeight:700}}>{todayDone.length}/{todayChores.length}</span>
-        </div>
-        <div style={{background:"rgba(255,255,255,0.08)",borderRadius:999,height:5,overflow:"hidden"}}>
-          <div style={{width:`${pct}%`,height:"100%",borderRadius:999,
-            background:pct===100?"linear-gradient(90deg,#52B788,#7ECFC0)":"linear-gradient(90deg,#F4A261,#E8C547)",
-            transition:"width 0.5s cubic-bezier(0.34,1.56,0.64,1)"}}/>
-        </div>
-        {pct===100&&<div style={{textAlign:"center",marginTop:8,color:"#7ECFC0",fontFamily:"'Cormorant Garamond',serif",fontSize:14,fontStyle:"italic"}}>✦ All done for today ✦</div>}
-        <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
-          <button onClick={()=>setReorderMode(p=>!p)} style={{
-            all:"unset",cursor:"pointer",fontSize:10,fontFamily:"monospace",
-            letterSpacing:"0.08em",textTransform:"uppercase",padding:"4px 10px",borderRadius:6,
-            background:reorderMode?"rgba(244,162,97,0.2)":"rgba(255,255,255,0.06)",
-            border:reorderMode?"1px solid rgba(244,162,97,0.4)":"1px solid rgba(255,255,255,0.1)",
-            color:reorderMode?"#F4A261":"rgba(255,255,255,0.35)",transition:"all 0.15s",
-          }}>{reorderMode?"✓ Done reordering":"⇅ Reorder"}</button>
-        </div>
-      </div>
+  // Drag refs at top level (hooks can't be inside nested components)
+  const longPressTimer = useRef(null);
+  const dragId = useRef(null);
+  const dragListRef = useRef([]);
 
-      {/* Pending chores grouped by time then category */}
-      {TIME_DISPLAY_ORDER.map(timeSlot => {
-        const choresInSlot = pendingGroups[timeSlot];
-        if (!choresInSlot || choresInSlot.length===0) return null;
-        const byCat = groupByCat(choresInSlot);
-        const sortedC = sortCats(Object.keys(byCat));
-        return (
-          <div key={timeSlot} style={{marginBottom:20}}>
-            {timeSlot!=="anytime" && (
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-                <span style={{fontSize:13}}>{TIME_ICON[timeSlot]}</span>
-                <span style={{fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",color:"rgba(255,255,255,0.4)",fontFamily:"monospace"}}>{TIME_LABEL[timeSlot]}</span>
-                <div style={{flex:1,height:1,background:"rgba(255,255,255,0.06)"}}/>
-              </div>
-            )}
-            {sortedC.map(cat=>(
-              <div key={cat} style={{marginBottom:14}}>
-                <CatHeader cat={cat}/>
-                {applyOrder(byCat[cat]).map((c, idx, arr)=>(
-                  <ChoreRow key={c.id} chore={c} date={today}
-                    onMoveUp={idx>0 ? ()=>moveChore(c.id,"up",arr) : null}
-                    onMoveDown={idx<arr.length-1 ? ()=>moveChore(c.id,"down",arr) : null}
-                  />
-                ))}
-              </div>
-            ))}
+  const makeDragHandlers = (choreList) => (id) => ({
+    onTouchStart: (e) => {
+      longPressTimer.current = setTimeout(() => {
+        dragId.current = id;
+        dragListRef.current = choreList.map(c => c.id);
+        setDragState({id, overId: id});
+        if (navigator.vibrate) navigator.vibrate(30);
+        // Attach non-passive touchmove to allow preventDefault (stops scroll during drag)
+        document.addEventListener("touchmove", handleTouchMove, {passive: false});
+        document.addEventListener("touchend", handleTouchEnd);
+      }, 400);
+    },
+    onTouchEnd: () => clearTimeout(longPressTimer.current),
+  });
+
+  const handleTouchMove = (e) => {
+    if (!dragId.current) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    const row = el?.closest("[data-choreid]");
+    const overId = row?.dataset?.choreid;
+    if (overId && overId !== dragId.current && dragListRef.current.includes(overId)) {
+      const list = [...dragListRef.current];
+      const from = list.indexOf(dragId.current);
+      const to = list.indexOf(overId);
+      if (from !== -1 && to !== -1) {
+        list.splice(from, 1);
+        list.splice(to, 0, dragId.current);
+        dragListRef.current = list;
+        setDragState({id: dragId.current, overId});
+      }
+    }
+  };
+
+  const handleTouchEnd = () => {
+    document.removeEventListener("touchmove", handleTouchMove);
+    document.removeEventListener("touchend", handleTouchEnd);
+    if (dragId.current) {
+      reorderChores(dragListRef.current);
+      dragId.current = null;
+      setDragState(null);
+    }
+  };
+
+    return (
+      <div style={{paddingBottom:60}}>
+        {/* Progress */}
+        <div style={{background:"rgba(255,255,255,0.04)",borderRadius:14,padding:"15px 18px",marginBottom:20,border:"1px solid rgba(255,255,255,0.07)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:9}}>
+            <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:18,color:"#f5f0e8"}}>{DAYS_FULL[today.getDay()]}, {MONTHS[today.getMonth()]} {today.getDate()}</span>
+            <span style={{fontFamily:"monospace",fontSize:12,color:pct===100?"#7ECFC0":"#F4A261",fontWeight:700}}>{todayDone.length}/{todayChores.length}</span>
           </div>
-        );
-      })}
-
-      {/* Done section */}
-      {todayDone.length>0&&(
-        <div style={{marginTop:22}}>
-          <button onClick={()=>setShowDone(p=>!p)} style={{all:"unset",cursor:"pointer",display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <span style={{fontSize:9,letterSpacing:"0.13em",textTransform:"uppercase",color:"rgba(255,255,255,0.2)",fontFamily:"monospace"}}>✓ Completed ({todayDone.length})</span>
-            <span style={{color:"rgba(255,255,255,0.18)",fontSize:9}}>{showDone?"▲":"▼"}</span>
-          </button>
-          {showDone&&todayDone.map(c=><ChoreRow key={c.id} chore={c} date={today}/>)}
+          <div style={{background:"rgba(255,255,255,0.08)",borderRadius:999,height:5,overflow:"hidden"}}>
+            <div style={{width:`${pct}%`,height:"100%",borderRadius:999,
+              background:pct===100?"linear-gradient(90deg,#52B788,#7ECFC0)":"linear-gradient(90deg,#F4A261,#E8C547)",
+              transition:"width 0.5s cubic-bezier(0.34,1.56,0.64,1)"}}/>
+          </div>
+          {pct===100&&<div style={{textAlign:"center",marginTop:8,color:"#7ECFC0",fontFamily:"'Cormorant Garamond',serif",fontSize:14,fontStyle:"italic"}}>✦ All done for today ✦</div>}
+          {dragState && <div style={{textAlign:"center",marginTop:8,fontSize:10,color:"rgba(244,162,97,0.7)",fontFamily:"monospace"}}>hold & drag to reorder</div>}
         </div>
-      )}
-    </div>
+
+        {/* Pending chores grouped by time then category */}
+        {TIME_DISPLAY_ORDER.map(timeSlot => {
+          const choresInSlot = pendingGroups[timeSlot];
+          if (!choresInSlot || choresInSlot.length===0) return null;
+          const byCat = groupByCat(choresInSlot);
+          const sortedC = sortCats(Object.keys(byCat));
+          return (
+            <div key={timeSlot} style={{marginBottom:20}}>
+              {timeSlot!=="anytime" && (
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+                  <span style={{fontSize:13}}>{TIME_ICON[timeSlot]}</span>
+                  <span style={{fontSize:10,letterSpacing:"0.12em",textTransform:"uppercase",color:"rgba(255,255,255,0.4)",fontFamily:"monospace"}}>{TIME_LABEL[timeSlot]}</span>
+                  <div style={{flex:1,height:1,background:"rgba(255,255,255,0.06)"}}/>
+                </div>
+              )}
+              {sortedC.map(cat=>{
+                const orderedCat = applyOrder(byCat[cat]);
+                const handlers = makeDragHandlers(orderedCat);
+                return (
+                  <div key={cat} style={{marginBottom:14}}>
+                    <CatHeader cat={cat}/>
+                    {orderedCat.map(c=>(
+                      <ChoreRow key={c.id} chore={c} date={today} dragHandlers={handlers}/>
+                    ))}
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })}
+
+        {/* Done section */}
+        {todayDone.length>0&&(
+          <div style={{marginTop:22}}>
+            <button onClick={()=>setShowDone(p=>!p)} style={{all:"unset",cursor:"pointer",display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+              <span style={{fontSize:9,letterSpacing:"0.13em",textTransform:"uppercase",color:"rgba(255,255,255,0.2)",fontFamily:"monospace"}}>✓ Completed ({todayDone.length})</span>
+              <span style={{color:"rgba(255,255,255,0.18)",fontSize:9}}>{showDone?"▲":"▼"}</span>
+            </button>
+            {showDone&&todayDone.map(c=><ChoreRow key={c.id} chore={c} date={today}/>)}
+          </div>
+        )}
+      </div>
   );
 
   const CalendarView = () => {
