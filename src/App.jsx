@@ -43,10 +43,14 @@ export default function App() {
   const [collapsedFreqs, setCollapsedFreqs] = useState({});
   const [synced,       setSynced]      = useState(false);
   const [debugMsg,     setDebugMsg]    = useState("loading...");
+  const scheduleRef   = useRef(DEFAULT_SCHEDULE);
   const freqKeyRef = useRef(null);
 
   // All known categories (defaults + custom)
   const allCats = [...new Set([...DEFAULT_CATS, ...customCats])].sort();
+
+  // Keep a ref to schedule so action functions always have the latest value
+  useEffect(() => { scheduleRef.current = schedule; }, [schedule]);
 
   // ── Firebase ───────────────────────────────────────────────────────────────
   // Read once on mount. All writes happen explicitly inside action functions — never
@@ -76,6 +80,7 @@ export default function App() {
       setSynced(true);
     }).catch(err => {
       setDebugMsg("ERROR: " + err.message);
+      alert("Firebase load error: " + err.message);
     });
   }, []);
   useEffect(() => { localStorage.setItem("teaco-activeUser", activeUser); }, [activeUser]);
@@ -100,37 +105,41 @@ export default function App() {
   }, [activeUser]);
 
   const saveEdit = (updated) => {
-    setSchedule(prev => {
-      const next = prev.map(c => c.id===updated.id ? updated : c);
-      writeData("schedule", toIdObject(next));
-      return next;
-    });
+    const next = scheduleRef.current.map(c => c.id===updated.id ? updated : c);
+    setSchedule(next);
+    writeData("schedule", toIdObject(next));
+    setDebugMsg("saved " + next.length + " tasks");
     setEditModal(null);
   };
   const deleteChore = (id) => {
-    setSchedule(prev => {
-      const next = prev.filter(c => c.id!==id);
-      writeData("schedule", toIdObject(next));
-      return next;
-    });
+    const next = scheduleRef.current.filter(c => c.id!==id);
+    setSchedule(next);
+    writeData("schedule", toIdObject(next));
+    setDebugMsg("saved " + next.length + " tasks");
     setEditModal(null);
   };
   const addChore = (c) => {
     const newChore = {...c, id:uid()};
-    setSchedule(prev => {
-      const next = [...prev, newChore];
-      writeData("schedule", toIdObject(next));
-      return next;
-    });
+    const next = [...scheduleRef.current, newChore];
+    setSchedule(next);
+    setDebugMsg("writing " + next.length + " tasks...");
+    writeData("schedule", toIdObject(next))
+      .then(() => {
+        setDebugMsg("✓ wrote " + next.length + " tasks to Firebase!");
+        alert("Saved! Firebase now has " + next.length + " tasks.");
+      })
+      .catch(err => {
+        setDebugMsg("✗ WRITE FAILED: " + err.message);
+        alert("Write failed: " + err.message + "\n\nCode: " + err.code);
+      });
     setAddModal(false);
   };
   const rescheduleChore = (chore, date, newDate) => {
     const pk = getPeriodKey(chore, date, completions);
-    setSchedule(prev => {
-      const next = prev.map(c => c.id!==chore.id ? c : {...c, reschedules:{...c.reschedules, [pk]:dateStr(newDate)}});
-      writeData("schedule", toIdObject(next));
-      return next;
-    });
+    const next = scheduleRef.current.map(c => c.id!==chore.id ? c : {...c, reschedules:{...c.reschedules, [pk]:dateStr(newDate)}});
+    setSchedule(next);
+    writeData("schedule", toIdObject(next));
+    setDebugMsg("saved " + next.length + " tasks");
     setEditModal(null);
   };
   const saveCatColors = (newColors, newCustom) => {
@@ -679,12 +688,23 @@ export default function App() {
             <Field label="Reschedule to">
               <input type="date" value={reschedDate} onChange={e=>setReschedDate(e.target.value)} style={inputSt}/>
             </Field>
-            <button onClick={()=>rescheduleChore(chore,date,parseDate(reschedDate))} style={primaryBtn}>Move to this date</button>
+            <button onClick={()=>{
+              const pk = getPeriodKey(chore,date,completions);
+              const next = scheduleRef.current.map(c => c.id!==chore.id ? c : {...c, reschedules:{...c.reschedules,[pk]:reschedDate}});
+              setSchedule(next);
+              setEditModal(null);
+              writeData("schedule", toIdObject(next))
+                .then(()=>setDebugMsg("✓ rescheduled, "+next.length+" tasks saved"))
+                .catch(err=>{ setDebugMsg("✗ "+err.message); alert("Write failed: "+err.message); });
+            }} style={primaryBtn}>Move to this date</button>
           </div>
         )}
       </Modal>
     );
   };
+
+  const addChoreRef = useRef(addChore);
+  useEffect(() => { addChoreRef.current = addChore; }, [addChore]);
 
   const AddModal = () => {
     if(!addModal) return null;
@@ -693,10 +713,20 @@ export default function App() {
         <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:18,color:"#f5f0e8",marginBottom:16}}>Add New Task</div>
         <ChoreForm
           initial={{task:"",cats:["Misc"],freq:"weekly",dow:1,timeOfDay:"anytime"}}
-          onSave={c=>addChore({
-            task:c.task, cat:c.cat, freq:c.freq, dow:c.dow,
-            onceDate:c.onceDate, timeOfDay:c.timeOfDay, nudgeDays:7,
-          })}
+          onSave={c=>{
+            const newChore = {
+              id: uid(),
+              task: c.task, cat: c.cat, freq: c.freq, dow: c.dow,
+              onceDate: c.onceDate, timeOfDay: c.timeOfDay, nudgeDays: 7,
+            };
+            const next = [...scheduleRef.current, newChore];
+            setSchedule(next);
+            setAddModal(false);
+            setDebugMsg("writing " + next.length + " tasks...");
+            writeData("schedule", toIdObject(next))
+              .then(() => setDebugMsg("✓ " + next.length + " tasks saved"))
+              .catch(err => { setDebugMsg("✗ " + err.message); alert("Write failed: " + err.message); });
+          }}
           showDelete={false}
         />
       </Modal>
@@ -851,7 +881,7 @@ export default function App() {
           <div style={{marginTop:4,fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:"monospace"}}>
             Checking in as <span style={{color:activeUserObj.color}}>{activeUserObj.name}</span>
             {" · "}{pct===100?"✓ all done today":`${todayPending.length} left today`}
-            <span style={{color:"rgba(255,255,255,0.25)",marginLeft:8,fontSize:10}}>{debugMsg}</span>
+            <span style={{color:"#ff4444",marginLeft:8,fontSize:11,fontWeight:700}}>{debugMsg}</span>
           </div>
         </div>
 
