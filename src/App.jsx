@@ -12,10 +12,20 @@ import {
   getNextDueDays, getPeriodKey, getCats,
 } from "./scheduling";
 
-// Convert schedule array to object keyed by task id for Firebase storage
+// Convert schedule array to object keyed by task id for Firebase storage.
+// Also strips undefined values which Firebase rejects.
+function cleanForFirebase(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v === undefined) continue;
+    if (v !== null && typeof v === "object" && !Array.isArray(v)) out[k] = cleanForFirebase(v);
+    else out[k] = v;
+  }
+  return out;
+}
 function toIdObject(arr) {
   const obj = {};
-  (arr || []).forEach(c => { if (c && c.id) obj[c.id] = c; });
+  (arr || []).forEach(c => { if (c && c.id) obj[c.id] = cleanForFirebase(c); });
   return obj;
 }
 
