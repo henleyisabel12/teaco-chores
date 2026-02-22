@@ -42,6 +42,7 @@ export default function App() {
   const [catModal,     setCatModal]    = useState(false);
   const [collapsedFreqs, setCollapsedFreqs] = useState({});
   const [synced,       setSynced]      = useState(false);
+  const [debugMsg,     setDebugMsg]    = useState("loading...");
   const freqKeyRef = useRef(null);
 
   // All known categories (defaults + custom)
@@ -61,15 +62,20 @@ export default function App() {
       readOnce("catColors"),
       readOnce("customCats"),
     ]).then(([sched, comps, usrs, cats, cCats]) => {
+      let schedCount = 0;
       if (sched && typeof sched === "object") {
         const arr = Object.values(sched).filter(Boolean);
+        schedCount = arr.length;
         if (arr.length > 0) setSchedule(arr);
       }
       if (comps && typeof comps === "object") setCompletions(comps);
       if (usrs)  setUsers(Array.isArray(usrs) ? usrs : Object.values(usrs).filter(Boolean));
       if (cats)  setCatColors(cats);
       if (cCats) setCustomCats(Array.isArray(cCats) ? cCats : Object.values(cCats).filter(Boolean));
+      setDebugMsg("loaded " + schedCount + " tasks from Firebase");
       setSynced(true);
+    }).catch(err => {
+      setDebugMsg("ERROR: " + err.message);
     });
   }, []);
   useEffect(() => { localStorage.setItem("teaco-activeUser", activeUser); }, [activeUser]);
@@ -845,7 +851,7 @@ export default function App() {
           <div style={{marginTop:4,fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:"monospace"}}>
             Checking in as <span style={{color:activeUserObj.color}}>{activeUserObj.name}</span>
             {" · "}{pct===100?"✓ all done today":`${todayPending.length} left today`}
-            {!synced&&<span style={{color:"rgba(255,255,255,0.2)",marginLeft:8}}>⟳ connecting…</span>}
+            <span style={{color:"rgba(255,255,255,0.25)",marginLeft:8,fontSize:10}}>{debugMsg}</span>
           </div>
         </div>
 
