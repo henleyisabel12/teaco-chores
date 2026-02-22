@@ -57,14 +57,46 @@ export default function App() {
     }
 
     const unsubs = [
-      subscribeToData("schedule",    v => { setSchedule(v || DEFAULT_SCHEDULE);       markLoaded("schedule"); }),
-      subscribeToData("completions", v => { setCompletions(v || {});                  markLoaded("completions"); }),
-      subscribeToData("users",       v => { setUsers(v || DEFAULT_USERS);             markLoaded("users"); }),
-      subscribeToData("catColors",   v => { setCatColors(v || DEFAULT_CAT_COLORS);    markLoaded("catColors"); }),
-      subscribeToData("customCats",  v => { setCustomCats(Array.isArray(v) ? v : []); markLoaded("customCats"); }),
+      subscribeToData("schedule",    v => {
+        if (v !== null) {
+          // Firebase returns arrays as objects with numeric string keys e.g. {"0":{...},"1":{...}}
+          // But it may also store as an object keyed by task id if we wrote it that way.
+          // Safely convert either format to a proper array, filtering out any null/undefined entries.
+          let arr;
+          if (Array.isArray(v)) {
+            arr = v.filter(Boolean);
+          } else {
+            arr = Object.values(v).filter(Boolean);
+          }
+          setSchedule(arr);
+        } else if (!writeReady.current.schedule) {
+          setSchedule(DEFAULT_SCHEDULE);
+        }
+        markLoaded("schedule");
+      }),
+      subscribeToData("completions", v => { if (v !== null) setCompletions(v); markLoaded("completions"); }),
+      subscribeToData("users",       v => { if (v !== null) setUsers(v);       markLoaded("users"); }),
+      subscribeToData("catColors",   v => { if (v !== null) setCatColors(v);   markLoaded("catColors"); }),
+      subscribeToData("customCats",  v => {
+        if (v !== null) setCustomCats(Array.isArray(v) ? v : Object.values(v));
+        markLoaded("customCats");
+      }),
     ];
-    // Safety net: if Firebase is slow or a key doesnt exist yet, unblock after 4s
-    const timeout = setTimeout(() => KEYS.forEach(k => markLoaded(k)), 4000);
+    // Safety net: if Firebase is slow or a key doesnt exist yet, unblock after 4s.
+    // Also seeds the default schedule into Firebase the very first time the app runs.
+    const timeout = setTimeout(() => {
+      KEYS.forEach(k => {
+        if (!writeReady.current[k]) {
+          // Key never arrived = doesnt exist in Firebase yet. Seed defaults now.
+          if (k === "schedule")    { const o={}; DEFAULT_SCHEDULE.forEach(c=>{ if(c&&c.id) o[c.id]=c; }); writeData("schedule", o); }
+          if (k === "users")       writeData("users",       DEFAULT_USERS);
+          if (k === "catColors")   writeData("catColors",   DEFAULT_CAT_COLORS);
+          if (k === "completions") writeData("completions", {});
+          if (k === "customCats")  writeData("customCats",  []);
+          markLoaded(k);
+        }
+      });
+    }, 4000);
     const stored = localStorage.getItem("teaco-activeUser");
     if (stored) setActiveUser(stored);
     return () => { unsubs.forEach(fn => fn()); clearTimeout(timeout); };
@@ -74,7 +106,10 @@ export default function App() {
   // (not on the initial load). writeReady ensures we never write before reading from Firebase.
   useEffect(() => {
     if (!writeReady.current.schedule) return;
-    writeData("schedule", schedule);
+    // Store as object keyed by task id — avoids Firebase array index issues on read
+    const asObject = {};
+    schedule.forEach(c => { if (c && c.id) asObject[c.id] = c; });
+    writeData("schedule", asObject);
   }, [schedule]);
   useEffect(() => {
     if (!writeReady.current.completions) return;
