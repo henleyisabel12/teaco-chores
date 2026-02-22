@@ -41,43 +41,53 @@ export default function App() {
   const allCats = [...new Set([...DEFAULT_CATS, ...customCats])].sort();
 
   // ── Firebase ───────────────────────────────────────────────────────────────
-  // Wait for ALL keys to arrive from Firebase before allowing any writes.
-  // This prevents default state from overwriting saved data on load.
   const loadedKeys = useRef(new Set());
-  const REQUIRED_KEYS = ["schedule","completions","users","catColors","customCats"];
-
-  function markLoaded(key) {
-    loadedKeys.current.add(key);
-    if (REQUIRED_KEYS.every(k => loadedKeys.current.has(k))) setSynced(true);
-  }
+  const didInitialWrite = useRef(false);
 
   useEffect(() => {
+    const KEYS = ["schedule","completions","users","catColors","customCats"];
+
+    function markLoaded(key) {
+      loadedKeys.current.add(key);
+      if (KEYS.every(k => loadedKeys.current.has(k))) setSynced(true);
+    }
+
     const unsubs = [
-      subscribeToData("schedule",    v => { setSchedule(v || DEFAULT_SCHEDULE); markLoaded("schedule"); }),
-      subscribeToData("completions", v => { setCompletions(v || {});            markLoaded("completions"); }),
-      subscribeToData("users",       v => { setUsers(v || DEFAULT_USERS);       markLoaded("users"); }),
-      subscribeToData("catColors",   v => { setCatColors(v || DEFAULT_CAT_COLORS); markLoaded("catColors"); }),
-      subscribeToData("customCats",  v => { setCustomCats(v || []);             markLoaded("customCats"); }),
+      subscribeToData("schedule",    v => { setSchedule(v || DEFAULT_SCHEDULE);      markLoaded("schedule"); }),
+      subscribeToData("completions", v => { setCompletions(v || {});                 markLoaded("completions"); }),
+      subscribeToData("users",       v => { setUsers(v || DEFAULT_USERS);            markLoaded("users"); }),
+      subscribeToData("catColors",   v => { setCatColors(v || DEFAULT_CAT_COLORS);   markLoaded("catColors"); }),
+      subscribeToData("customCats",  v => { setCustomCats(Array.isArray(v) ? v : []); markLoaded("customCats"); }),
     ];
-    // If any key doesnt exist in Firebase yet, mark it after 3s so app doesnt hang
-    const timeout = setTimeout(() => REQUIRED_KEYS.forEach(k => markLoaded(k)), 3000);
+    // Safety net: if Firebase is slow or keys dont exist yet, unblock after 3s
+    const timeout = setTimeout(() => KEYS.forEach(k => markLoaded(k)), 3000);
     const stored = localStorage.getItem("teaco-activeUser");
     if (stored) setActiveUser(stored);
     return () => { unsubs.forEach(fn => fn()); clearTimeout(timeout); };
   }, []);
 
-  // Writes only fire after initial load is complete, and skip the first render
-  // after synced flips so we dont immediately re-write what we just read
-  const didInitialWrite = useRef(false);
+  // After synced, skip the very first effect run (which would re-write what we just read)
   useEffect(() => {
     if (!synced) return;
     if (!didInitialWrite.current) { didInitialWrite.current = true; return; }
     writeData("schedule", schedule);
   }, [schedule, synced]);
-  useEffect(() => { if (!synced || !didInitialWrite.current) return; writeData("completions", completions); }, [completions, synced]);
-  useEffect(() => { if (!synced || !didInitialWrite.current) return; writeData("users",       users);       }, [users,       synced]);
-  useEffect(() => { if (!synced || !didInitialWrite.current) return; writeData("catColors",   catColors);   }, [catColors,   synced]);
-  useEffect(() => { if (!synced || !didInitialWrite.current) return; writeData("customCats",  customCats);  }, [customCats,  synced]);
+  useEffect(() => {
+    if (!synced || !didInitialWrite.current) return;
+    writeData("completions", completions);
+  }, [completions, synced]);
+  useEffect(() => {
+    if (!synced || !didInitialWrite.current) return;
+    writeData("users", users);
+  }, [users, synced]);
+  useEffect(() => {
+    if (!synced || !didInitialWrite.current) return;
+    writeData("catColors", catColors);
+  }, [catColors, synced]);
+  useEffect(() => {
+    if (!synced || !didInitialWrite.current) return;
+    writeData("customCats", customCats);
+  }, [customCats, synced]);
   useEffect(() => { localStorage.setItem("teaco-activeUser", activeUser); }, [activeUser]);
 
   useEffect(() => {
