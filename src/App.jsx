@@ -213,7 +213,7 @@ export default function App() {
     </div>
   );
 
-  const ChoreRow = ({chore, date, small, onMoveUp, onMoveDown}) => {
+  const ChoreRow = ({chore, date, small, onMoveUp, onMoveDown, isReordering}) => {
     const done = isCompletedOnDate(chore, date, completions);
     const completion = completions[chore.id];
     const completedByUser = done && completion ? users.find(u=>u.id===completion.user) : null;
@@ -231,7 +231,7 @@ export default function App() {
         opacity: done ? 0.5 : 1, transition:"all 0.15s",
       }}>
         {/* Reorder buttons — only in reorder mode */}
-        {reorderMode && (
+        {isReordering && (
           <div style={{display:"flex",flexDirection:"column",flexShrink:0,gap:1}}>
             <button onClick={onMoveUp} disabled={!onMoveUp} style={{
               all:"unset", width:22, height:18, display:"flex", alignItems:"center",
@@ -283,7 +283,7 @@ export default function App() {
           </div>
         </div>
         {/* Edit — hidden in reorder mode */}
-        {!reorderMode && (
+        {!isReordering && (
           <button onClick={()=>setEditModal({chore,date})} style={{
             all:"unset", cursor:"pointer", padding:"1px 5px", fontSize:13,
             color:"rgba(255,255,255,0.18)", flexShrink:0, transition:"color 0.15s",
@@ -356,6 +356,7 @@ export default function App() {
                   <CatHeader cat={cat}/>
                   {orderedCat.map((c,i)=>(
                     <ChoreRow key={c.id} chore={c} date={today}
+                      isReordering={reorderMode}
                       onMoveUp={reorderMode && i>0 ? ()=>moveChore(c.id,"up",orderedCat) : null}
                       onMoveDown={reorderMode && i<orderedCat.length-1 ? ()=>moveChore(c.id,"down",orderedCat) : null}
                     />
