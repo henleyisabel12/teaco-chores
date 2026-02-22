@@ -323,15 +323,17 @@ export default function App() {
             transition:"width 0.5s cubic-bezier(0.34,1.56,0.64,1)"}}/>
         </div>
         {pct===100&&<div style={{textAlign:"center",marginTop:8,color:"#7ECFC0",fontFamily:"'Cormorant Garamond',serif",fontSize:14,fontStyle:"italic"}}>✦ All done for today ✦</div>}
-        <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
-          <button onClick={()=>setReorderMode(p=>!p)} style={{
-            all:"unset",cursor:"pointer",fontSize:10,fontFamily:"monospace",
-            letterSpacing:"0.08em",textTransform:"uppercase",padding:"5px 12px",borderRadius:6,
-            background:reorderMode?"rgba(244,162,97,0.25)":"rgba(255,255,255,0.07)",
-            border:reorderMode?"1px solid rgba(244,162,97,0.5)":"1px solid rgba(255,255,255,0.12)",
-            color:reorderMode?"#F4A261":"rgba(255,255,255,0.4)",transition:"all 0.15s",
-          }}>{reorderMode ? "✓ Done" : "⇅ Reorder"}</button>
-        </div>
+      </div>
+
+      {/* Reorder toggle — always visible below progress card */}
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
+        <button onClick={()=>setReorderMode(p=>!p)} style={{
+          all:"unset",cursor:"pointer",fontSize:11,fontFamily:"monospace",
+          letterSpacing:"0.08em",textTransform:"uppercase",padding:"6px 14px",borderRadius:7,
+          background:reorderMode?"rgba(244,162,97,0.25)":"rgba(255,255,255,0.08)",
+          border:reorderMode?"1px solid rgba(244,162,97,0.6)":"1px solid rgba(255,255,255,0.15)",
+          color:reorderMode?"#F4A261":"rgba(255,255,255,0.5)",transition:"all 0.15s",
+        }}>{reorderMode ? "✓ Done reordering" : "⇅ Reorder tasks"}</button>
       </div>
 
       {/* Pending chores grouped by time then category */}
