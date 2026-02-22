@@ -52,6 +52,8 @@ export default function App() {
   const [catModal,     setCatModal]    = useState(false);
   const [collapsedFreqs, setCollapsedFreqs] = useState({});
   const [synced,       setSynced]      = useState(false);
+  const [sortOrder,    setSortOrder]   = useState({});  // {choreId: number}
+  const [reorderMode,  setReorderMode] = useState(false);
   const scheduleRef   = useRef(DEFAULT_SCHEDULE);
   const freqKeyRef = useRef(null);
 
@@ -68,13 +70,13 @@ export default function App() {
     const stored = localStorage.getItem("teaco-activeUser");
     if (stored) setActiveUser(stored);
 
-    Promise.all([
+    const loadAll = async () => {
       readOnce("schedule"),
       readOnce("completions"),
       readOnce("users"),
       readOnce("catColors"),
       readOnce("customCats"),
-    ]).then(([sched, comps, usrs, cats, cCats]) => {
+      const [sched, comps, usrs, cats, cCats] = await Promise.all([
       if (sched && typeof sched === "object") {
         const arr = Object.values(sched).filter(Boolean);
         if (arr.length > 0) setSchedule(arr);
@@ -83,8 +85,11 @@ export default function App() {
       if (usrs)  setUsers(Array.isArray(usrs) ? usrs : Object.values(usrs).filter(Boolean));
       if (cats)  setCatColors(cats);
       if (cCats) setCustomCats(Array.isArray(cCats) ? cCats : Object.values(cCats).filter(Boolean));
+      const sortData = await readOnce("sortOrder");
+      if (sortData && typeof sortData === "object") setSortOrder(sortData);
       setSynced(true);
-    });
+    };
+    loadAll();
   }, []);
   useEffect(() => { localStorage.setItem("teaco-activeUser", activeUser); }, [activeUser]);
 
@@ -141,6 +146,22 @@ export default function App() {
     setCatModal(false);
   };
 
+  const moveChore = (choreId, direction, choreList) => {
+    // choreList is the ordered list of chores currently visible in that group
+    const ids = choreList.map(c => c.id);
+    const idx = ids.indexOf(choreId);
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= ids.length) return;
+    // Build a sortOrder map from current positions, then swap
+    const currentOrder = {};
+    ids.forEach((id, i) => { currentOrder[id] = sortOrder[id] ?? i * 10; });
+    const aVal = currentOrder[ids[idx]];
+    const bVal = currentOrder[ids[swapIdx]];
+    const next = {...sortOrder, [ids[idx]]: bVal, [ids[swapIdx]]: aVal};
+    setSortOrder(next);
+    writeData("sortOrder", next);
+  };
+
   // ── Derived ────────────────────────────────────────────────────────────────
   const activeUserObj = users.find(u => u.id===activeUser) || users[0];
   const todayChores   = getChoresForDate(schedule, today, completions);
@@ -169,6 +190,15 @@ export default function App() {
     return byCat;
   }
 
+  // Apply sortOrder to a list of chores
+  function applyOrder(chores) {
+    return [...chores].sort((a, b) => {
+      const ao = sortOrder[a.id] ?? 9999;
+      const bo = sortOrder[b.id] ?? 9999;
+      return ao - bo;
+    });
+  }
+
   // Sort cats using CAT_ORDER then alpha
   function sortCats(catList) {
     return [...catList].sort((a,b) => {
@@ -191,7 +221,7 @@ export default function App() {
     </div>
   );
 
-  const ChoreRow = ({chore, date, small}) => {
+  const ChoreRow = ({chore, date, small, onMoveUp, onMoveDown}) => {
     const done = isCompletedOnDate(chore, date, completions);
     const completion = completions[chore.id];
     const completedByUser = done && completion ? users.find(u=>u.id===completion.user) : null;
@@ -242,14 +272,27 @@ export default function App() {
             {timeIcon && <span style={{fontSize:10}}>{timeIcon}</span>}
           </div>
         </div>
+        {/* Reorder arrows */}
+        {reorderMode && (
+          <div style={{display:"flex",flexDirection:"column",gap:1,flexShrink:0,marginTop:1}}>
+            <button onClick={onMoveUp} style={{
+              all:"unset",cursor:onMoveUp?"pointer":"default",fontSize:10,lineHeight:1,
+              color:onMoveUp?"rgba(255,255,255,0.5)":"rgba(255,255,255,0.1)",padding:"1px 3px",
+            }}>▲</button>
+            <button onClick={onMoveDown} style={{
+              all:"unset",cursor:onMoveDown?"pointer":"default",fontSize:10,lineHeight:1,
+              color:onMoveDown?"rgba(255,255,255,0.5)":"rgba(255,255,255,0.1)",padding:"1px 3px",
+            }}>▼</button>
+          </div>
+        )}
         {/* Edit */}
-        <button onClick={()=>setEditModal({chore,date})} style={{
+        {!reorderMode && <button onClick={()=>setEditModal({chore,date})} style={{
           all:"unset", cursor:"pointer", padding:"1px 5px", fontSize:13,
           color:"rgba(255,255,255,0.18)", flexShrink:0, marginTop:1, transition:"color 0.15s",
         }}
           onMouseOver={e=>e.currentTarget.style.color="rgba(255,255,255,0.6)"}
           onMouseOut={e=>e.currentTarget.style.color="rgba(255,255,255,0.18)"}
-        >···</button>
+        >···</button>}
       </div>
     );
   };
@@ -269,6 +312,15 @@ export default function App() {
             transition:"width 0.5s cubic-bezier(0.34,1.56,0.64,1)"}}/>
         </div>
         {pct===100&&<div style={{textAlign:"center",marginTop:8,color:"#7ECFC0",fontFamily:"'Cormorant Garamond',serif",fontSize:14,fontStyle:"italic"}}>✦ All done for today ✦</div>}
+        <div style={{display:"flex",justifyContent:"flex-end",marginTop:10}}>
+          <button onClick={()=>setReorderMode(p=>!p)} style={{
+            all:"unset",cursor:"pointer",fontSize:10,fontFamily:"monospace",
+            letterSpacing:"0.08em",textTransform:"uppercase",padding:"4px 10px",borderRadius:6,
+            background:reorderMode?"rgba(244,162,97,0.2)":"rgba(255,255,255,0.06)",
+            border:reorderMode?"1px solid rgba(244,162,97,0.4)":"1px solid rgba(255,255,255,0.1)",
+            color:reorderMode?"#F4A261":"rgba(255,255,255,0.35)",transition:"all 0.15s",
+          }}>{reorderMode?"✓ Done reordering":"⇅ Reorder"}</button>
+        </div>
       </div>
 
       {/* Pending chores grouped by time then category */}
@@ -289,7 +341,12 @@ export default function App() {
             {sortedC.map(cat=>(
               <div key={cat} style={{marginBottom:14}}>
                 <CatHeader cat={cat}/>
-                {byCat[cat].map(c=><ChoreRow key={c.id} chore={c} date={today}/>)}
+                {applyOrder(byCat[cat]).map((c, idx, arr)=>(
+                  <ChoreRow key={c.id} chore={c} date={today}
+                    onMoveUp={idx>0 ? ()=>moveChore(c.id,"up",arr) : null}
+                    onMoveDown={idx<arr.length-1 ? ()=>moveChore(c.id,"down",arr) : null}
+                  />
+                ))}
               </div>
             ))}
           </div>
