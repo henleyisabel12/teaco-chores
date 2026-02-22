@@ -21,7 +21,33 @@ export function dateStr(d) {
   return d.toISOString().split("T")[0];
 }
 export function freqInterval(freq) {
-  return { daily:1,"3day":3,weekly:7,biweekly:14,triweekly:21,monthly:30,"2month":60,"3month":91,"6month":182,annual:365,"3year":1095 }[freq] || 7;
+  // Built-in presets
+  const presets = {
+    daily:1, "3day":3, weekly:7, biweekly:14, triweekly:21,
+    monthly:30, "2month":60, "3month":91, "6month":182,
+    annual:365, "3year":1095, once:0,
+  };
+  if (presets[freq] !== undefined) return presets[freq];
+  // Custom frequency: stored as "custom:N" where N = number of days
+  if (typeof freq === "string" && freq.startsWith("custom:")) {
+    return parseInt(freq.split(":")[1], 10) || 7;
+  }
+  return 7;
+}
+export function freqDisplayLabel(freq) {
+  const labels = {
+    daily:"Daily", "3day":"Every 3 Days", weekly:"Weekly",
+    biweekly:"Every 2 Weeks", triweekly:"Every 3 Weeks", monthly:"Monthly",
+    "2month":"Every 2 Months", "3month":"Every 3 Months",
+    "6month":"Every 6 Months", annual:"Annually", "3year":"Every 3 Years",
+    once:"One-time",
+  };
+  if (labels[freq]) return labels[freq];
+  if (typeof freq === "string" && freq.startsWith("custom:")) {
+    const n = parseInt(freq.split(":")[1], 10);
+    return `Every ${n} day${n===1?"":"s"}`;
+  }
+  return freq;
 }
 export function uid() {
   return Math.random().toString(36).slice(2, 9);
@@ -32,7 +58,15 @@ export function todayDate() {
   return d;
 }
 
+// ── Core scheduling logic ─────────────────────────────────────────────────────
+
 export function choreIsOnDate(chore, date, completions) {
+  // One-time task: only show on its scheduled date
+  if (chore.freq === "once") {
+    const due = parseDate(chore.onceDate);
+    return due && due.getTime() === date.getTime();
+  }
+
   if (chore.freq === "daily") return true;
 
   const interval = freqInterval(chore.freq);
@@ -61,7 +95,7 @@ export function choreIsOnDate(chore, date, completions) {
     return date >= EPOCH;
   }
 
-  // monthly+
+  // monthly+, custom:N
   const nudge = chore.nudgeDays ?? 14;
   const firstDue = lastDone ? addDays(lastDone, interval) : addDays(EPOCH, nudge);
   if (firstDue > date) return false;
@@ -69,6 +103,7 @@ export function choreIsOnDate(chore, date, completions) {
 }
 
 export function getPeriodKey(chore, date, completions) {
+  if (chore.freq === "once") return chore.onceDate || dateStr(date);
   const interval = freqInterval(chore.freq);
   const lastDoneStr = completions[chore.id]?.date || chore.lastDone;
   const lastDone = parseDate(lastDoneStr);
@@ -98,6 +133,7 @@ export function isCompletedOnDate(chore, date, completions) {
   const d = parseDate(c.date);
   if (!d) return false;
   if (chore.freq === "daily") return d.getTime() === date.getTime();
+  if (chore.freq === "once") return d.getTime() === date.getTime();
   const interval = freqInterval(chore.freq);
   return d >= addDays(date, -(interval - 1)) && d <= date;
 }
@@ -105,6 +141,11 @@ export function isCompletedOnDate(chore, date, completions) {
 export function getNextDueDays(chore, completions) {
   const today = todayDate();
   if (chore.freq === "daily") return 0;
+  if (chore.freq === "once") {
+    const due = parseDate(chore.onceDate);
+    if (!due) return 0;
+    return Math.max(0, daysBetween(today, due));
+  }
   const interval = freqInterval(chore.freq);
   const lastDoneStr = completions[chore.id]?.date || chore.lastDone;
   const lastDone = parseDate(lastDoneStr);
@@ -130,4 +171,11 @@ export function getNextDueDays(chore, completions) {
   const firstDue = lastDone ? addDays(lastDone, interval) : addDays(EPOCH, nudge);
   if (firstDue <= today) return 0;
   return daysBetween(today, firstDue);
+}
+
+// Returns cats as array — handles both string (legacy) and array (new multi-cat)
+export function getCats(chore) {
+  if (!chore.cat) return ["Misc"];
+  if (Array.isArray(chore.cat)) return chore.cat;
+  return [chore.cat];
 }
