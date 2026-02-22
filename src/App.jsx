@@ -41,53 +41,57 @@ export default function App() {
   const allCats = [...new Set([...DEFAULT_CATS, ...customCats])].sort();
 
   // ── Firebase ───────────────────────────────────────────────────────────────
-  const loadedKeys = useRef(new Set());
-  const didInitialWrite = useRef(false);
+  // Each key gets its own "ready to write" flag so they dont interfere with each other.
+  // A key becomes writable only AFTER Firebase has sent us its value at least once.
+  const writeReady = useRef({
+    schedule: false, completions: false, users: false,
+    catColors: false, customCats: false,
+  });
 
   useEffect(() => {
     const KEYS = ["schedule","completions","users","catColors","customCats"];
 
     function markLoaded(key) {
-      loadedKeys.current.add(key);
-      if (KEYS.every(k => loadedKeys.current.has(k))) setSynced(true);
+      writeReady.current[key] = true;
+      if (KEYS.every(k => writeReady.current[k])) setSynced(true);
     }
 
     const unsubs = [
-      subscribeToData("schedule",    v => { setSchedule(v || DEFAULT_SCHEDULE);      markLoaded("schedule"); }),
-      subscribeToData("completions", v => { setCompletions(v || {});                 markLoaded("completions"); }),
-      subscribeToData("users",       v => { setUsers(v || DEFAULT_USERS);            markLoaded("users"); }),
-      subscribeToData("catColors",   v => { setCatColors(v || DEFAULT_CAT_COLORS);   markLoaded("catColors"); }),
+      subscribeToData("schedule",    v => { setSchedule(v || DEFAULT_SCHEDULE);       markLoaded("schedule"); }),
+      subscribeToData("completions", v => { setCompletions(v || {});                  markLoaded("completions"); }),
+      subscribeToData("users",       v => { setUsers(v || DEFAULT_USERS);             markLoaded("users"); }),
+      subscribeToData("catColors",   v => { setCatColors(v || DEFAULT_CAT_COLORS);    markLoaded("catColors"); }),
       subscribeToData("customCats",  v => { setCustomCats(Array.isArray(v) ? v : []); markLoaded("customCats"); }),
     ];
-    // Safety net: if Firebase is slow or keys dont exist yet, unblock after 3s
-    const timeout = setTimeout(() => KEYS.forEach(k => markLoaded(k)), 3000);
+    // Safety net: if Firebase is slow or a key doesnt exist yet, unblock after 4s
+    const timeout = setTimeout(() => KEYS.forEach(k => markLoaded(k)), 4000);
     const stored = localStorage.getItem("teaco-activeUser");
     if (stored) setActiveUser(stored);
     return () => { unsubs.forEach(fn => fn()); clearTimeout(timeout); };
   }, []);
 
-  // After synced, skip the very first effect run (which would re-write what we just read)
+  // Each write effect only fires when its own key is ready AND the value actually changed
+  // (not on the initial load). writeReady ensures we never write before reading from Firebase.
   useEffect(() => {
-    if (!synced) return;
-    if (!didInitialWrite.current) { didInitialWrite.current = true; return; }
+    if (!writeReady.current.schedule) return;
     writeData("schedule", schedule);
-  }, [schedule, synced]);
+  }, [schedule]);
   useEffect(() => {
-    if (!synced || !didInitialWrite.current) return;
+    if (!writeReady.current.completions) return;
     writeData("completions", completions);
-  }, [completions, synced]);
+  }, [completions]);
   useEffect(() => {
-    if (!synced || !didInitialWrite.current) return;
+    if (!writeReady.current.users) return;
     writeData("users", users);
-  }, [users, synced]);
+  }, [users]);
   useEffect(() => {
-    if (!synced || !didInitialWrite.current) return;
+    if (!writeReady.current.catColors) return;
     writeData("catColors", catColors);
-  }, [catColors, synced]);
+  }, [catColors]);
   useEffect(() => {
-    if (!synced || !didInitialWrite.current) return;
+    if (!writeReady.current.customCats) return;
     writeData("customCats", customCats);
-  }, [customCats, synced]);
+  }, [customCats]);
   useEffect(() => { localStorage.setItem("teaco-activeUser", activeUser); }, [activeUser]);
 
   useEffect(() => {
