@@ -71,12 +71,14 @@ export default function App() {
     if (stored) setActiveUser(stored);
 
     const loadAll = async () => {
-      readOnce("schedule"),
-      readOnce("completions"),
-      readOnce("users"),
-      readOnce("catColors"),
-      readOnce("customCats"),
-      const [sched, comps, usrs, cats, cCats] = await Promise.all([
+      const [sched, comps, usrs, cats, cCats, sortData] = await Promise.all([
+        readOnce("schedule"),
+        readOnce("completions"),
+        readOnce("users"),
+        readOnce("catColors"),
+        readOnce("customCats"),
+        readOnce("sortOrder"),
+      ]);
       if (sched && typeof sched === "object") {
         const arr = Object.values(sched).filter(Boolean);
         if (arr.length > 0) setSchedule(arr);
@@ -85,7 +87,6 @@ export default function App() {
       if (usrs)  setUsers(Array.isArray(usrs) ? usrs : Object.values(usrs).filter(Boolean));
       if (cats)  setCatColors(cats);
       if (cCats) setCustomCats(Array.isArray(cCats) ? cCats : Object.values(cCats).filter(Boolean));
-      const sortData = await readOnce("sortOrder");
       if (sortData && typeof sortData === "object") setSortOrder(sortData);
       setSynced(true);
     };
