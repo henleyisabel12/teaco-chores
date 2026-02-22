@@ -52,7 +52,6 @@ export default function App() {
   const [catModal,     setCatModal]    = useState(false);
   const [collapsedFreqs, setCollapsedFreqs] = useState({});
   const [synced,       setSynced]      = useState(false);
-  const [debugMsg,     setDebugMsg]    = useState("loading...");
   const scheduleRef   = useRef(DEFAULT_SCHEDULE);
   const freqKeyRef = useRef(null);
 
@@ -76,21 +75,15 @@ export default function App() {
       readOnce("catColors"),
       readOnce("customCats"),
     ]).then(([sched, comps, usrs, cats, cCats]) => {
-      let schedCount = 0;
       if (sched && typeof sched === "object") {
         const arr = Object.values(sched).filter(Boolean);
-        schedCount = arr.length;
         if (arr.length > 0) setSchedule(arr);
       }
       if (comps && typeof comps === "object") setCompletions(comps);
       if (usrs)  setUsers(Array.isArray(usrs) ? usrs : Object.values(usrs).filter(Boolean));
       if (cats)  setCatColors(cats);
       if (cCats) setCustomCats(Array.isArray(cCats) ? cCats : Object.values(cCats).filter(Boolean));
-      setDebugMsg("loaded " + schedCount + " tasks from Firebase");
       setSynced(true);
-    }).catch(err => {
-      setDebugMsg("ERROR: " + err.message);
-      alert("Firebase load error: " + err.message);
     });
   }, []);
   useEffect(() => { localStorage.setItem("teaco-activeUser", activeUser); }, [activeUser]);
@@ -118,30 +111,19 @@ export default function App() {
     const next = scheduleRef.current.map(c => c.id===updated.id ? updated : c);
     setSchedule(next);
     writeData("schedule", toIdObject(next));
-    setDebugMsg("saved " + next.length + " tasks");
     setEditModal(null);
   };
   const deleteChore = (id) => {
     const next = scheduleRef.current.filter(c => c.id!==id);
     setSchedule(next);
     writeData("schedule", toIdObject(next));
-    setDebugMsg("saved " + next.length + " tasks");
     setEditModal(null);
   };
   const addChore = (c) => {
     const newChore = {...c, id:uid()};
     const next = [...scheduleRef.current, newChore];
     setSchedule(next);
-    setDebugMsg("writing " + next.length + " tasks...");
-    writeData("schedule", toIdObject(next))
-      .then(() => {
-        setDebugMsg("✓ wrote " + next.length + " tasks to Firebase!");
-        alert("Saved! Firebase now has " + next.length + " tasks.");
-      })
-      .catch(err => {
-        setDebugMsg("✗ WRITE FAILED: " + err.message);
-        alert("Write failed: " + err.message + "\n\nCode: " + err.code);
-      });
+    writeData("schedule", toIdObject(next));
     setAddModal(false);
   };
   const rescheduleChore = (chore, date, newDate) => {
@@ -149,7 +131,6 @@ export default function App() {
     const next = scheduleRef.current.map(c => c.id!==chore.id ? c : {...c, reschedules:{...c.reschedules, [pk]:dateStr(newDate)}});
     setSchedule(next);
     writeData("schedule", toIdObject(next));
-    setDebugMsg("saved " + next.length + " tasks");
     setEditModal(null);
   };
   const saveCatColors = (newColors, newCustom) => {
@@ -891,7 +872,8 @@ export default function App() {
           <div style={{marginTop:4,fontSize:11,color:"rgba(255,255,255,0.3)",fontFamily:"monospace"}}>
             Checking in as <span style={{color:activeUserObj.color}}>{activeUserObj.name}</span>
             {" · "}{pct===100?"✓ all done today":`${todayPending.length} left today`}
-            <span style={{color:"#ff4444",marginLeft:8,fontSize:11,fontWeight:700}}>{debugMsg}</span>
+            {!synced&&<span style={{color:"rgba(255,255,255,0.2)",marginLeft:8}}>⟳ connecting…</span>}
+
           </div>
         </div>
 
