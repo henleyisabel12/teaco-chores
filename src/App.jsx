@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { subscribeToData, writeData } from "./firebase";
+import { writeData, readOnce } from "./firebase";
 import { DEFAULT_SCHEDULE } from "./schedule";
 import {
   DEFAULT_CAT_COLORS, getCatColor, FREQ_COLOR, FREQ_LABEL, FREQ_OPTIONS,
@@ -11,6 +11,13 @@ import {
   freqDisplayLabel, uid, getChoresForDate, isCompletedOnDate,
   getNextDueDays, getPeriodKey, getCats,
 } from "./scheduling";
+
+// Convert schedule array to object keyed by task id for Firebase storage
+function toIdObject(arr) {
+  const obj = {};
+  (arr || []).forEach(c => { if (c && c.id) obj[c.id] = c; });
+  return obj;
+}
 
 export default function App() {
   const today = todayDate();
@@ -41,92 +48,30 @@ export default function App() {
   const allCats = [...new Set([...DEFAULT_CATS, ...customCats])].sort();
 
   // ── Firebase ───────────────────────────────────────────────────────────────
-  // Each key gets its own "ready to write" flag so they dont interfere with each other.
-  // A key becomes writable only AFTER Firebase has sent us its value at least once.
-  const writeReady = useRef({
-    schedule: false, completions: false, users: false,
-    catColors: false, customCats: false,
-  });
-
+  // Read once on mount. All writes happen explicitly inside action functions — never
+  // via useEffect — so there is no risk of stale state being written back to Firebase.
   useEffect(() => {
-    const KEYS = ["schedule","completions","users","catColors","customCats"];
-
-    function markLoaded(key) {
-      writeReady.current[key] = true;
-      if (KEYS.every(k => writeReady.current[k])) setSynced(true);
-    }
-
-    const unsubs = [
-      subscribeToData("schedule",    v => {
-        if (v !== null) {
-          // Firebase returns arrays as objects with numeric string keys e.g. {"0":{...},"1":{...}}
-          // But it may also store as an object keyed by task id if we wrote it that way.
-          // Safely convert either format to a proper array, filtering out any null/undefined entries.
-          let arr;
-          if (Array.isArray(v)) {
-            arr = v.filter(Boolean);
-          } else {
-            arr = Object.values(v).filter(Boolean);
-          }
-          setSchedule(arr);
-        } else if (!writeReady.current.schedule) {
-          setSchedule(DEFAULT_SCHEDULE);
-        }
-        markLoaded("schedule");
-      }),
-      subscribeToData("completions", v => { if (v !== null) setCompletions(v); markLoaded("completions"); }),
-      subscribeToData("users",       v => { if (v !== null) setUsers(v);       markLoaded("users"); }),
-      subscribeToData("catColors",   v => { if (v !== null) setCatColors(v);   markLoaded("catColors"); }),
-      subscribeToData("customCats",  v => {
-        if (v !== null) setCustomCats(Array.isArray(v) ? v : Object.values(v));
-        markLoaded("customCats");
-      }),
-    ];
-    // Safety net: if Firebase is slow or a key doesnt exist yet, unblock after 4s.
-    // Also seeds the default schedule into Firebase the very first time the app runs.
-    const timeout = setTimeout(() => {
-      KEYS.forEach(k => {
-        if (!writeReady.current[k]) {
-          // Key never arrived = doesnt exist in Firebase yet. Seed defaults now.
-          if (k === "schedule")    { const o={}; DEFAULT_SCHEDULE.forEach(c=>{ if(c&&c.id) o[c.id]=c; }); writeData("schedule", o); }
-          if (k === "users")       writeData("users",       DEFAULT_USERS);
-          if (k === "catColors")   writeData("catColors",   DEFAULT_CAT_COLORS);
-          if (k === "completions") writeData("completions", {});
-          if (k === "customCats")  writeData("customCats",  []);
-          markLoaded(k);
-        }
-      });
-    }, 4000);
     const stored = localStorage.getItem("teaco-activeUser");
     if (stored) setActiveUser(stored);
-    return () => { unsubs.forEach(fn => fn()); clearTimeout(timeout); };
-  }, []);
 
-  // Each write effect only fires when its own key is ready AND the value actually changed
-  // (not on the initial load). writeReady ensures we never write before reading from Firebase.
-  useEffect(() => {
-    if (!writeReady.current.schedule) return;
-    // Store as object keyed by task id — avoids Firebase array index issues on read
-    const asObject = {};
-    schedule.forEach(c => { if (c && c.id) asObject[c.id] = c; });
-    writeData("schedule", asObject);
-  }, [schedule]);
-  useEffect(() => {
-    if (!writeReady.current.completions) return;
-    writeData("completions", completions);
-  }, [completions]);
-  useEffect(() => {
-    if (!writeReady.current.users) return;
-    writeData("users", users);
-  }, [users]);
-  useEffect(() => {
-    if (!writeReady.current.catColors) return;
-    writeData("catColors", catColors);
-  }, [catColors]);
-  useEffect(() => {
-    if (!writeReady.current.customCats) return;
-    writeData("customCats", customCats);
-  }, [customCats]);
+    Promise.all([
+      readOnce("schedule"),
+      readOnce("completions"),
+      readOnce("users"),
+      readOnce("catColors"),
+      readOnce("customCats"),
+    ]).then(([sched, comps, usrs, cats, cCats]) => {
+      if (sched && typeof sched === "object") {
+        const arr = Object.values(sched).filter(Boolean);
+        if (arr.length > 0) setSchedule(arr);
+      }
+      if (comps && typeof comps === "object") setCompletions(comps);
+      if (usrs)  setUsers(Array.isArray(usrs) ? usrs : Object.values(usrs).filter(Boolean));
+      if (cats)  setCatColors(cats);
+      if (cCats) setCustomCats(Array.isArray(cCats) ? cCats : Object.values(cCats).filter(Boolean));
+      setSynced(true);
+    });
+  }, []);
   useEffect(() => { localStorage.setItem("teaco-activeUser", activeUser); }, [activeUser]);
 
   useEffect(() => {
@@ -139,23 +84,54 @@ export default function App() {
   const toggleChore = useCallback((choreId, date) => {
     const ds = dateStr(date);
     setCompletions(prev => {
+      let next;
       const cur = prev[choreId];
-      if (cur && cur.date === ds) { const n = {...prev}; delete n[choreId]; return n; }
-      return {...prev, [choreId]: {date:ds, user:activeUser}};
+      if (cur && cur.date === ds) { next = {...prev}; delete next[choreId]; }
+      else next = {...prev, [choreId]: {date:ds, user:activeUser}};
+      writeData("completions", next);
+      return next;
     });
   }, [activeUser]);
 
-  const saveEdit = (updated) => { setSchedule(prev => prev.map(c => c.id===updated.id ? updated : c)); setEditModal(null); };
-  const deleteChore = (id)   => { setSchedule(prev => prev.filter(c => c.id!==id));                   setEditModal(null); };
-  const addChore = (c)       => { setSchedule(prev => [...prev, {...c, id:uid()}]);                    setAddModal(false); };
+  const saveEdit = (updated) => {
+    setSchedule(prev => {
+      const next = prev.map(c => c.id===updated.id ? updated : c);
+      writeData("schedule", toIdObject(next));
+      return next;
+    });
+    setEditModal(null);
+  };
+  const deleteChore = (id) => {
+    setSchedule(prev => {
+      const next = prev.filter(c => c.id!==id);
+      writeData("schedule", toIdObject(next));
+      return next;
+    });
+    setEditModal(null);
+  };
+  const addChore = (c) => {
+    const newChore = {...c, id:uid()};
+    setSchedule(prev => {
+      const next = [...prev, newChore];
+      writeData("schedule", toIdObject(next));
+      return next;
+    });
+    setAddModal(false);
+  };
   const rescheduleChore = (chore, date, newDate) => {
     const pk = getPeriodKey(chore, date, completions);
-    setSchedule(prev => prev.map(c => c.id!==chore.id ? c : {...c, reschedules:{...c.reschedules, [pk]:dateStr(newDate)}}));
+    setSchedule(prev => {
+      const next = prev.map(c => c.id!==chore.id ? c : {...c, reschedules:{...c.reschedules, [pk]:dateStr(newDate)}});
+      writeData("schedule", toIdObject(next));
+      return next;
+    });
     setEditModal(null);
   };
   const saveCatColors = (newColors, newCustom) => {
     setCatColors(newColors);
     setCustomCats(newCustom);
+    writeData("catColors", newColors);
+    writeData("customCats", newCustom);
     setCatModal(false);
   };
 
@@ -743,7 +719,7 @@ export default function App() {
             </div>
           </div>
         ))}
-        <button onClick={()=>{setUsers(eu);setUserModal(false);}} style={primaryBtn}>Save</button>
+        <button onClick={()=>{setUsers(eu);writeData("users",eu);setUserModal(false);}} style={primaryBtn}>Save</button>
       </Modal>
     );
   };
