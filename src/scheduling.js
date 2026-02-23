@@ -70,8 +70,9 @@ export function choreIsOnDate(chore, date, completions) {
   if (chore.freq === "daily") return true;
 
   const interval = freqInterval(chore.freq);
-  const lastDoneStr = completions[chore.id]?.date || chore.lastDone;
-  const lastDone = parseDate(lastDoneStr);
+  // Use only chore.lastDone for scheduling — NOT the current completion date.
+  // Using the completion causes tasks to vanish from today as soon as they're checked off.
+  const lastDone = parseDate(chore.lastDone);
 
   // Manual reschedule for this period
   const pk = getPeriodKey(chore, date, completions);
@@ -105,8 +106,7 @@ export function choreIsOnDate(chore, date, completions) {
 export function getPeriodKey(chore, date, completions) {
   if (chore.freq === "once") return chore.onceDate || dateStr(date);
   const interval = freqInterval(chore.freq);
-  const lastDoneStr = completions[chore.id]?.date || chore.lastDone;
-  const lastDone = parseDate(lastDoneStr);
+  const lastDone = parseDate(chore.lastDone);
   const nudge = chore.nudgeDays ?? 14;
   let firstDue;
   if (chore.freq === "3day") {
@@ -147,8 +147,7 @@ export function getNextDueDays(chore, completions) {
     return Math.max(0, daysBetween(today, due));
   }
   const interval = freqInterval(chore.freq);
-  const lastDoneStr = completions[chore.id]?.date || chore.lastDone;
-  const lastDone = parseDate(lastDoneStr);
+  const lastDone = parseDate(chore.lastDone);
 
   if (chore.freq === "3day") {
     const base = lastDone ? addDays(lastDone, 3) : addDays(EPOCH, 0);

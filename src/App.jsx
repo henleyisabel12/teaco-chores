@@ -337,11 +337,11 @@ export default function App() {
         }}>{reorderMode ? "✓ Done reordering" : "⇅ Reorder tasks"}</button>
       </div>
 
-      {/* Pending chores grouped by time then category */}
+      {/* All chores grouped by time then category — done ones stay in place */}
       {TIME_DISPLAY_ORDER.map(timeSlot => {
-        const choresInSlot = pendingGroups[timeSlot];
-        if (!choresInSlot || choresInSlot.length===0) return null;
-        const byCat = groupByCat(choresInSlot);
+        const allInSlot = groupByTimeAndCat(todayChores)[timeSlot];
+        if (!allInSlot || allInSlot.length===0) return null;
+        const byCat = groupByCat(allInSlot);
         const sortedC = sortCats(Object.keys(byCat));
         return (
           <div key={timeSlot} style={{marginBottom:20}}>
@@ -370,17 +370,6 @@ export default function App() {
           </div>
         );
       })}
-
-      {/* Done section */}
-      {todayDone.length>0&&(
-        <div style={{marginTop:22}}>
-          <button onClick={()=>setShowDone(p=>!p)} style={{all:"unset",cursor:"pointer",display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-            <span style={{fontSize:9,letterSpacing:"0.13em",textTransform:"uppercase",color:"rgba(255,255,255,0.2)",fontFamily:"monospace"}}>✓ Completed ({todayDone.length})</span>
-            <span style={{color:"rgba(255,255,255,0.18)",fontSize:9}}>{showDone?"▲":"▼"}</span>
-          </button>
-          {showDone&&todayDone.map(c=><ChoreRow key={c.id} chore={c} date={today}/>)}
-        </div>
-      )}
     </div>
   );
 
