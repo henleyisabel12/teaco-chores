@@ -98,9 +98,27 @@ export function choreIsOnDate(chore, date, completions) {
 
   // monthly+, custom:N
   const nudge = chore.nudgeDays ?? 14;
-  const firstDue = lastDone ? addDays(lastDone, interval) : addDays(EPOCH, nudge);
-  if (firstDue > date) return false;
-  return daysBetween(firstDue, date) % interval === 0;
+  const baseDue = lastDone ? addDays(lastDone, interval) : addDays(EPOCH, nudge);
+
+  // Find if any past reschedule should serve as the anchor for future occurrences.
+  let anchor = baseDue;
+  if (chore.reschedules) {
+    const pastRescheds = Object.values(chore.reschedules)
+      .map(parseDate).filter(d => d && d <= date)
+      .sort((a,b) => b - a);
+    if (pastRescheds.length > 0) anchor = addDays(pastRescheds[0], interval);
+  }
+
+  // If a dow is set, snap anchor to nearest future matching day-of-week
+  if (chore.dow != null) {
+    const targetDow = chore.dow;
+    const diff = ((targetDow - anchor.getDay()) + 7) % 7;
+    anchor = addDays(anchor, diff);
+  }
+
+  if (anchor > date) return false;
+  if (chore.dow != null) return date.getDay() === chore.dow && daysBetween(anchor, date) % interval < 7;
+  return daysBetween(anchor, date) % interval === 0;
 }
 
 export function getPeriodKey(chore, date, completions) {
@@ -116,7 +134,16 @@ export function getPeriodKey(chore, date, completions) {
     const diff = ((dow - EPOCH.getDay()) + 7) % 7;
     firstDue = addDays(EPOCH, diff);
   } else {
-    firstDue = lastDone ? addDays(lastDone, interval) : addDays(EPOCH, nudge);
+    const baseDue2 = lastDone ? addDays(lastDone, interval) : addDays(EPOCH, nudge);
+    // Use most recent past reschedule as anchor if present
+    let anchor2 = baseDue2;
+    if (chore.reschedules) {
+      const pastRescheds2 = Object.values(chore.reschedules)
+        .map(parseDate).filter(d => d && d <= date)
+        .sort((a,b) => b - a);
+      if (pastRescheds2.length > 0) anchor2 = addDays(pastRescheds2[0], interval);
+    }
+    firstDue = anchor2;
   }
   if (firstDue > date) return dateStr(firstDue);
   const idx = Math.floor(daysBetween(firstDue, date) / interval);

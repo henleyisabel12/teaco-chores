@@ -434,9 +434,9 @@ export default function App() {
           {selChores.length===0&&<div style={{textAlign:"center",color:"rgba(255,255,255,0.18)",fontFamily:"monospace",fontSize:11,padding:"16px 0"}}>No chores scheduled</div>}
 
           {TIME_DISPLAY_ORDER.map(timeSlot=>{
-            const slotChores = selGroups[timeSlot];
-            if(!slotChores||slotChores.length===0) return null;
-            const byCat = groupByCat(slotChores);
+            const allInSlot = groupByTimeAndCat(selChores)[timeSlot];
+            if(!allInSlot||allInSlot.length===0) return null;
+            const byCat = groupByCat(allInSlot);
             const sortedC = sortCats(Object.keys(byCat));
             return (
               <div key={timeSlot} style={{marginBottom:16}}>
@@ -447,22 +447,18 @@ export default function App() {
                     <div style={{flex:1,height:1,background:"rgba(255,255,255,0.06)"}}/>
                   </div>
                 )}
-                {sortedC.map(cat=>(
-                  <div key={cat} style={{marginBottom:10}}>
-                    <CatHeader cat={cat}/>
-                    {byCat[cat].map(c=><ChoreRow key={c.id} chore={c} date={selectedDate} small/>)}
-                  </div>
-                ))}
+                {sortedC.map(cat=>{
+                  const orderedCat = applyOrder(byCat[cat]);
+                  return (
+                    <div key={cat} style={{marginBottom:10}}>
+                      <CatHeader cat={cat}/>
+                      {orderedCat.map(c=><ChoreRow key={c.id} chore={c} date={selectedDate} small/>)}
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
-
-          {selDone.length>0&&(
-            <div style={{marginTop:12}}>
-              <div style={{fontSize:9,letterSpacing:"0.13em",textTransform:"uppercase",color:"rgba(255,255,255,0.18)",fontFamily:"monospace",marginBottom:6}}>✓ Done</div>
-              {selDone.map(c=><ChoreRow key={c.id} chore={c} date={selectedDate} small/>)}
-            </div>
-          )}
         </div>
       </div>
     );
@@ -640,7 +636,7 @@ export default function App() {
         timeOfDay: timeVal,
       };
       if(freqVal==="once") base.onceDate = onceDateVal;
-      if(["weekly","biweekly","triweekly"].includes(freqVal)) base.dow = dowVal;
+      if(["weekly","biweekly","triweekly","monthly","2month","3month","6month","annual","3year"].includes(freqVal) || freqVal==="custom") base.dow = dowVal;
       onSave({...initial, ...base});
     };
 
@@ -703,7 +699,7 @@ export default function App() {
             <input type="date" value={onceDateVal} onChange={e=>setOnceDateVal(e.target.value)} style={inputSt}/>
           </Field>
         )}
-        {["weekly","biweekly","triweekly"].includes(freqVal)&&(
+        {freqVal!=="once"&&freqVal!=="daily"&&(
           <Field label="Day of week">
             <select value={dowVal} onChange={e=>setDowVal(Number(e.target.value))} style={selectSt}>
               {DAYS_FULL.map((d,i)=><option key={i} value={i}>{d}</option>)}
@@ -749,8 +745,7 @@ export default function App() {
               setSchedule(next);
               setEditModal(null);
               writeData("schedule", toIdObject(next))
-                .then(()=>setDebugMsg("✓ rescheduled, "+next.length+" tasks saved"))
-                .catch(err=>{ setDebugMsg("✗ "+err.message); alert("Write failed: "+err.message); });
+                ;
             }} style={primaryBtn}>Move to this date</button>
           </div>
         )}
@@ -777,10 +772,7 @@ export default function App() {
             const next = [...scheduleRef.current, newChore];
             setSchedule(next);
             setAddModal(false);
-            setDebugMsg("writing " + next.length + " tasks...");
-            writeData("schedule", toIdObject(next))
-              .then(() => setDebugMsg("✓ " + next.length + " tasks saved"))
-              .catch(err => { setDebugMsg("✗ " + err.message); alert("Write failed: " + err.message); });
+                    writeData("schedule", toIdObject(next));
           }}
           showDelete={false}
         />
