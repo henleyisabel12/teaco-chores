@@ -9,7 +9,7 @@ import {
 import {
   todayDate, dateStr, parseDate, addDays, daysBetween, freqInterval,
   freqDisplayLabel, uid, getChoresForDate, isCompletedOnDate,
-  getNextDueDays, getPeriodKey, getCats,
+  getNextDueDays, getPeriodKey, getCats, EPOCH,
 } from "./scheduling";
 
 // Convert schedule array to object keyed by task id for Firebase storage.
