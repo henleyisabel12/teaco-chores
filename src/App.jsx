@@ -739,14 +739,36 @@ export default function App() {
             <Field label="Reschedule to">
               <input type="date" value={reschedDate} onChange={e=>setReschedDate(e.target.value)} style={inputSt}/>
             </Field>
-            <button onClick={()=>{
-              const pk = getPeriodKey(chore,date,completions);
-              const next = scheduleRef.current.map(c => c.id!==chore.id ? c : {...c, reschedules:{...c.reschedules,[pk]:reschedDate}});
-              setSchedule(next);
-              setEditModal(null);
-              writeData("schedule", toIdObject(next))
-                ;
-            }} style={primaryBtn}>Move to this date</button>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <button onClick={()=>{
+                // Move just this occurrence — store in reschedules map
+                const pk = getPeriodKey(chore,date,completions);
+                const next = scheduleRef.current.map(c => c.id!==chore.id ? c : {...c, reschedules:{...c.reschedules,[pk]:reschedDate}});
+                setSchedule(next);
+                setEditModal(null);
+                writeData("schedule", toIdObject(next));
+              }} style={primaryBtn}>Move this occurrence only</button>
+              <button onClick={()=>{
+                // Move this AND all future occurrences by updating the base anchor.
+                // We store the new date as a "base reschedule" that the scheduling logic
+                // will use as the new anchor for all future intervals.
+                const next = scheduleRef.current.map(c => {
+                  if(c.id!==chore.id) return c;
+                  // Clear all existing reschedules on/after this date, then set new anchor
+                  const kept = {};
+                  Object.entries(c.reschedules||{}).forEach(([pk,v])=>{
+                    const d = parseDate(v);
+                    if(d && d < parseDate(reschedDate)) kept[pk] = v;
+                  });
+                  // Store the new anchor using a special key "anchor"
+                  kept["__anchor"] = reschedDate;
+                  return {...c, reschedules: kept};
+                });
+                setSchedule(next);
+                setEditModal(null);
+                writeData("schedule", toIdObject(next));
+              }} style={{...primaryBtn, background:"rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.7)"}}>Move this & all future occurrences</button>
+            </div>
           </div>
         )}
       </Modal>

@@ -100,11 +100,15 @@ export function choreIsOnDate(chore, date, completions) {
   const nudge = chore.nudgeDays ?? 14;
   const baseDue = lastDone ? addDays(lastDone, interval) : addDays(EPOCH, nudge);
 
-  // Find if any past reschedule should serve as the anchor for future occurrences.
+  // Use __anchor if set (from "move this & all future" reschedule)
   let anchor = baseDue;
-  if (chore.reschedules) {
-    const pastRescheds = Object.values(chore.reschedules)
-      .map(parseDate).filter(d => d && d <= date)
+  if (chore.reschedules?.__anchor) {
+    anchor = parseDate(chore.reschedules.__anchor);
+  } else if (chore.reschedules) {
+    // Legacy: use most recent past individual reschedule as anchor
+    const pastRescheds = Object.entries(chore.reschedules)
+      .filter(([k]) => k !== "__anchor")
+      .map(([,v]) => parseDate(v)).filter(d => d && d <= date)
       .sort((a,b) => b - a);
     if (pastRescheds.length > 0) anchor = addDays(pastRescheds[0], interval);
   }
@@ -135,11 +139,13 @@ export function getPeriodKey(chore, date, completions) {
     firstDue = addDays(EPOCH, diff);
   } else {
     const baseDue2 = lastDone ? addDays(lastDone, interval) : addDays(EPOCH, nudge);
-    // Use most recent past reschedule as anchor if present
     let anchor2 = baseDue2;
-    if (chore.reschedules) {
-      const pastRescheds2 = Object.values(chore.reschedules)
-        .map(parseDate).filter(d => d && d <= date)
+    if (chore.reschedules?.__anchor) {
+      anchor2 = parseDate(chore.reschedules.__anchor);
+    } else if (chore.reschedules) {
+      const pastRescheds2 = Object.entries(chore.reschedules)
+        .filter(([k]) => k !== "__anchor")
+        .map(([,v]) => parseDate(v)).filter(d => d && d <= date)
         .sort((a,b) => b - a);
       if (pastRescheds2.length > 0) anchor2 = addDays(pastRescheds2[0], interval);
     }
