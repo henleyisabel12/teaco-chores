@@ -749,20 +749,25 @@ export default function App() {
                 writeData("schedule", toIdObject(next));
               }} style={primaryBtn}>Move this occurrence only</button>
               <button onClick={()=>{
-                // Move this AND all future occurrences by updating the base anchor.
-                // We store the new date as a "base reschedule" that the scheduling logic
-                // will use as the new anchor for all future intervals.
+                const newD = parseDate(reschedDate);
                 const next = scheduleRef.current.map(c => {
                   if(c.id!==chore.id) return c;
-                  // Clear all existing reschedules on/after this date, then set new anchor
                   const kept = {};
-                  Object.entries(c.reschedules||{}).forEach(([pk,v])=>{
+                  Object.entries(c.reschedules||{}).forEach(([k,v])=>{
                     const d = parseDate(v);
-                    if(d && d < parseDate(reschedDate)) kept[pk] = v;
+                    if(d && d < newD) kept[k] = v;
                   });
-                  // Store the new anchor using a special key "anchor"
-                  kept["__anchor"] = reschedDate;
-                  return {...c, reschedules: kept};
+                  if(["weekly","biweekly","triweekly"].includes(c.freq)) {
+                    const newDow = newD.getDay();
+                    const weekNum = Math.floor((newD - EPOCH) / (7 * 86400000));
+                    const updated = {...c, dow: newDow, reschedules: kept};
+                    if(c.freq==="biweekly") updated.weekOffset = weekNum % 2;
+                    if(c.freq==="triweekly") updated.weekOffset = weekNum % 3;
+                    return updated;
+                  } else {
+                    kept["__anchor"] = reschedDate;
+                    return {...c, reschedules: kept};
+                  }
                 });
                 setSchedule(next);
                 setEditModal(null);
