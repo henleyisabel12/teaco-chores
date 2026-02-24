@@ -763,6 +763,9 @@ export default function App() {
                     const updated = {...c, dow: newDow, reschedules: kept};
                     if(c.freq==="biweekly") updated.weekOffset = weekNum % 2;
                     if(c.freq==="triweekly") updated.weekOffset = weekNum % 3;
+                    // Also reschedule the current period to the chosen date
+                    const pk = getPeriodKey(c, date, completions);
+                    updated.reschedules = {...updated.reschedules, [pk]: reschedDate};
                     return updated;
                   } else {
                     kept["__anchor"] = reschedDate;
