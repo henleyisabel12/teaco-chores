@@ -525,7 +525,7 @@ export default function App() {
                       <span style={{color:"rgba(255,255,255,0.2)",fontSize:9}}>{isOpen?"▲":"▼"}</span>
                     </div>
                   </button>
-                  {isOpen&&chores.map(c=><AllChoreRow key={c.id} chore={c}/>)}
+                  {isOpen&&chores.map(c=><AllChoreRow key={c.id} chore={c} dotColor={FREQ_COLOR[c.freq]||"#aaa"}/>)}
                 </div>
               );
             })}
@@ -615,7 +615,7 @@ export default function App() {
   };
 
   // Row used in All view
-  const AllChoreRow = ({chore}) => {
+  const AllChoreRow = ({chore, dotColor}) => {
     const daysUntil = getNextDueDays(chore, completions);
     const isCur = isCompletedOnDate(chore, today, completions);
     const completion = completions[chore.id];
@@ -628,7 +628,7 @@ export default function App() {
         borderRadius:9,marginBottom:3,background:"rgba(255,255,255,0.03)",
         border:"1px solid rgba(255,255,255,0.06)",opacity:isCur?0.45:1,
       }}>
-        <div style={{width:7,height:7,borderRadius:"50%",background:getCatColor(cats[0],catColors),marginTop:4,flexShrink:0}}/>
+        <div style={{width:7,height:7,borderRadius:"50%",background:dotColor||getCatColor(cats[0],catColors),marginTop:4,flexShrink:0}}/>
         <div style={{flex:1}}>
           <div style={{fontSize:14,color:"rgba(255,255,255,0.75)",lineHeight:1.4}}>{chore.task}</div>
           <div style={{display:"flex",gap:6,marginTop:2,flexWrap:"wrap",alignItems:"center"}}>
