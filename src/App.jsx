@@ -9,7 +9,7 @@ import {
 import {
   todayDate, dateStr, parseDate, addDays, daysBetween, freqInterval,
   freqDisplayLabel, uid, getChoresForDate, isCompletedOnDate,
-  getNextDueDays, getPeriodKey, getCats, EPOCH,
+  getNextDueDays, getPeriodKey, getCats,
 } from "./scheduling";
 
 // Convert schedule array to object keyed by task id for Firebase storage.
@@ -489,7 +489,7 @@ export default function App() {
           }}>Categories</button>
         </div>
         {/* View mode toggle */}
-        <div style={{display:"flex",gap:6,marginBottom:14,alignItems:"center"}}>
+        <div style={{display:"flex",gap:6,marginBottom:14}}>
           {["freq","cat"].map(mode=>(
             <button key={mode} onClick={()=>setAllViewMode(mode)} style={{
               all:"unset",cursor:"pointer",padding:"5px 14px",borderRadius:6,
@@ -500,13 +500,6 @@ export default function App() {
               transition:"all 0.15s",
             }}>{mode==="freq"?"By Frequency":"By Category"}</button>
           ))}
-          <button onClick={()=>setReorderMode(p=>!p)} style={{
-            all:"unset",cursor:"pointer",padding:"5px 12px",borderRadius:6,marginLeft:"auto",
-            fontFamily:"monospace",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",
-            background:reorderMode?"rgba(244,162,97,0.25)":"rgba(255,255,255,0.07)",
-            border:reorderMode?"1px solid rgba(244,162,97,0.5)":"1px solid rgba(255,255,255,0.12)",
-            color:reorderMode?"#F4A261":"rgba(255,255,255,0.4)",transition:"all 0.15s",
-          }}>{reorderMode?"✓ Done":"⇅ Reorder"}</button>
         </div>
 
         {/* Category view */}
@@ -532,12 +525,7 @@ export default function App() {
                       <span style={{color:"rgba(255,255,255,0.2)",fontSize:9}}>{isOpen?"▲":"▼"}</span>
                     </div>
                   </button>
-                  {isOpen&&applyOrder(chores).map((c,i,arr)=>(
-                    <AllChoreRow key={c.id} chore={c} dotColor={FREQ_COLOR[c.freq]||"#aaa"} showFreq
-                      onMoveUp={reorderMode&&i>0?()=>moveChore(c.id,"up",arr):null}
-                      onMoveDown={reorderMode&&i<arr.length-1?()=>moveChore(c.id,"down",arr):null}
-                    />
-                  ))}
+                  {isOpen&&chores.map(c=><AllChoreRow key={c.id} chore={c}/>)}
                 </div>
               );
             })}
@@ -591,12 +579,7 @@ export default function App() {
                   <span style={{color:"rgba(255,255,255,0.2)",fontSize:9}}>{isOpen?"▲":"▼"}</span>
                 </div>
               </button>
-              {isOpen&&applyOrder(chores).map((c,i,arr)=>(
-                <AllChoreRow key={c.id} chore={c}
-                  onMoveUp={reorderMode&&i>0?()=>moveChore(c.id,"up",arr):null}
-                  onMoveDown={reorderMode&&i<arr.length-1?()=>moveChore(c.id,"down",arr):null}
-                />
-              ))}
+              {isOpen&&chores.map(c=><AllChoreRow key={c.id} chore={c}/>)}
             </div>
           );
         })}
@@ -621,23 +604,17 @@ export default function App() {
                   </div>
                   <span style={{color:"rgba(255,255,255,0.2)",fontSize:9}}>{isOpen?"▲":"▼"}</span>
                 </button>
-                {isOpen&&applyOrder(chores).map((c,i,arr)=>(
-                  <AllChoreRow key={c.id} chore={c}
-                    onMoveUp={reorderMode&&i>0?()=>moveChore(c.id,"up",arr):null}
-                    onMoveDown={reorderMode&&i<arr.length-1?()=>moveChore(c.id,"down",arr):null}
-                  />
-                ))}
+                {isOpen&&chores.map(c=><AllChoreRow key={c.id} chore={c}/>)}
               </div>
             );
           });
         })()}
-        </>}
       </div>
     );
   };
 
   // Row used in All view
-  const AllChoreRow = ({chore, dotColor, showFreq, onMoveUp, onMoveDown}) => {
+  const AllChoreRow = ({chore}) => {
     const daysUntil = getNextDueDays(chore, completions);
     const isCur = isCompletedOnDate(chore, today, completions);
     const completion = completions[chore.id];
@@ -650,32 +627,13 @@ export default function App() {
         borderRadius:9,marginBottom:3,background:"rgba(255,255,255,0.03)",
         border:"1px solid rgba(255,255,255,0.06)",opacity:isCur?0.45:1,
       }}>
-        {reorderMode && (
-          <div style={{display:"flex",flexDirection:"column",flexShrink:0,gap:1,marginTop:1}}>
-            <button onClick={onMoveUp} disabled={!onMoveUp} style={{
-              all:"unset",width:22,height:18,display:"flex",alignItems:"center",
-              justifyContent:"center",cursor:onMoveUp?"pointer":"default",
-              color:onMoveUp?"rgba(255,255,255,0.6)":"rgba(255,255,255,0.1)",
-              fontSize:11,borderRadius:4,background:onMoveUp?"rgba(255,255,255,0.07)":"transparent",
-            }}>▲</button>
-            <button onClick={onMoveDown} disabled={!onMoveDown} style={{
-              all:"unset",width:22,height:18,display:"flex",alignItems:"center",
-              justifyContent:"center",cursor:onMoveDown?"pointer":"default",
-              color:onMoveDown?"rgba(255,255,255,0.6)":"rgba(255,255,255,0.1)",
-              fontSize:11,borderRadius:4,background:onMoveDown?"rgba(255,255,255,0.07)":"transparent",
-            }}>▼</button>
-          </div>
-        )}
-        <div style={{width:7,height:7,borderRadius:"50%",background:dotColor||getCatColor(cats[0],catColors),marginTop:4,flexShrink:0}}/>
+        <div style={{width:7,height:7,borderRadius:"50%",background:getCatColor(cats[0],catColors),marginTop:4,flexShrink:0}}/>
         <div style={{flex:1}}>
           <div style={{fontSize:14,color:"rgba(255,255,255,0.75)",lineHeight:1.4}}>{chore.task}</div>
           <div style={{display:"flex",gap:6,marginTop:2,flexWrap:"wrap",alignItems:"center"}}>
-            {showFreq
-              ? <span style={{fontSize:9,color:FREQ_COLOR[chore.freq]||"#aaa",fontFamily:"monospace"}}>{freqDisplayLabel(chore.freq)}</span>
-              : cats.map(c=>(
-                <span key={c} style={{fontSize:9,color:getCatColor(c,catColors),fontFamily:"monospace"}}>{c}</span>
-              ))
-            }
+            {cats.map(c=>(
+              <span key={c} style={{fontSize:9,color:getCatColor(c,catColors),fontFamily:"monospace"}}>{c}</span>
+            ))}
             {timeIcon&&<span style={{fontSize:10}}>{timeIcon}</span>}
             {chore.freq!=="daily"&&<span style={{fontSize:9,color:daysUntil===0?"#F4A261":"rgba(255,255,255,0.2)",fontFamily:"monospace"}}>
               {(()=>{
@@ -696,6 +654,7 @@ export default function App() {
           </div>
         </div>
         <button onClick={()=>setEditModal({chore,date:today})} style={{all:"unset",cursor:"pointer",fontSize:13,color:"rgba(255,255,255,0.2)",padding:"0 4px"}}>···</button>
+        </>}
       </div>
     );
   };
