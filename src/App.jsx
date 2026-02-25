@@ -620,7 +620,7 @@ export default function App() {
   };
 
   // Row used in All view
-  const AllChoreRow = ({chore}) => {
+  const AllChoreRow = ({chore, dotColor, showFreq, onMoveUp, onMoveDown}) => {
     const daysUntil = getNextDueDays(chore, completions);
     const isCur = isCompletedOnDate(chore, today, completions);
     const completion = completions[chore.id];
@@ -633,13 +633,32 @@ export default function App() {
         borderRadius:9,marginBottom:3,background:"rgba(255,255,255,0.03)",
         border:"1px solid rgba(255,255,255,0.06)",opacity:isCur?0.45:1,
       }}>
-        <div style={{width:7,height:7,borderRadius:"50%",background:getCatColor(cats[0],catColors),marginTop:4,flexShrink:0}}/>
+        {reorderMode&&(
+          <div style={{display:"flex",flexDirection:"column",flexShrink:0,gap:1,marginTop:1}}>
+            <button onClick={onMoveUp} disabled={!onMoveUp} style={{
+              all:"unset",width:22,height:18,display:"flex",alignItems:"center",
+              justifyContent:"center",cursor:onMoveUp?"pointer":"default",
+              color:onMoveUp?"rgba(255,255,255,0.6)":"rgba(255,255,255,0.1)",
+              fontSize:11,borderRadius:4,background:onMoveUp?"rgba(255,255,255,0.07)":"transparent",
+            }}>▲</button>
+            <button onClick={onMoveDown} disabled={!onMoveDown} style={{
+              all:"unset",width:22,height:18,display:"flex",alignItems:"center",
+              justifyContent:"center",cursor:onMoveDown?"pointer":"default",
+              color:onMoveDown?"rgba(255,255,255,0.6)":"rgba(255,255,255,0.1)",
+              fontSize:11,borderRadius:4,background:onMoveDown?"rgba(255,255,255,0.07)":"transparent",
+            }}>▼</button>
+          </div>
+        )}
+        <div style={{width:7,height:7,borderRadius:"50%",background:dotColor||getCatColor(cats[0],catColors),marginTop:4,flexShrink:0}}/>
         <div style={{flex:1}}>
           <div style={{fontSize:14,color:"rgba(255,255,255,0.75)",lineHeight:1.4}}>{chore.task}</div>
           <div style={{display:"flex",gap:6,marginTop:2,flexWrap:"wrap",alignItems:"center"}}>
-            {cats.map(c=>(
-              <span key={c} style={{fontSize:9,color:getCatColor(c,catColors),fontFamily:"monospace"}}>{c}</span>
-            ))}
+            {showFreq
+              ? <span style={{fontSize:9,color:FREQ_COLOR[chore.freq]||"#aaa",fontFamily:"monospace"}}>{freqDisplayLabel(chore.freq)}</span>
+              : cats.map(c=>(
+                <span key={c} style={{fontSize:9,color:getCatColor(c,catColors),fontFamily:"monospace"}}>{c}</span>
+              ))
+            }
             {timeIcon&&<span style={{fontSize:10}}>{timeIcon}</span>}
             {chore.freq!=="daily"&&<span style={{fontSize:9,color:daysUntil===0?"#F4A261":"rgba(255,255,255,0.2)",fontFamily:"monospace"}}>
               {(()=>{
@@ -815,10 +834,10 @@ export default function App() {
                 writeData("schedule", toIdObject(next));
               }} style={primaryBtn}>Move this occurrence only</button>
               <button onClick={()=>{
+                try {
                 const newD = parseDate(reschedDate);
                 const next = scheduleRef.current.map(c => {
                   if(c.id!==chore.id) return c;
-                  // Clear reschedules on/after this date
                   const kept = {};
                   Object.entries(c.reschedules||{}).forEach(([k,v])=>{
                     const d = parseDate(v);
@@ -842,6 +861,7 @@ export default function App() {
                 setSchedule(next);
                 setEditModal(null);
                 writeData("schedule", toIdObject(next));
+                } catch(e) { alert("Error: " + e.message); }
               }} style={{...primaryBtn, background:"rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.7)"}}>Move this & all future occurrences</button>
             </div>
           </div>
