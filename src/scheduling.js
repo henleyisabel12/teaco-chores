@@ -82,8 +82,16 @@ export function choreIsOnDate(chore, date, completions) {
   }
 
   if (chore.freq === "3day") {
-    const base = lastDone ? addDays(lastDone, 3) : addDays(EPOCH, 0);
-    return base.getTime() === date.getTime();
+    // Use __anchor if set, otherwise lastDone
+    let base;
+    if (chore.reschedules?.__anchor) {
+      base = parseDate(chore.reschedules.__anchor);
+    } else {
+      base = lastDone ? addDays(lastDone, 3) : addDays(EPOCH, 0);
+    }
+    // Walk forward in 3-day steps from base to find if date matches
+    if (base > date) return false;
+    return daysBetween(base, date) % 3 === 0;
   }
 
   if (["weekly","biweekly","triweekly"].includes(chore.freq)) {
@@ -183,8 +191,14 @@ export function getNextDueDays(chore, completions) {
   const lastDone = parseDate(chore.lastDone);
 
   if (chore.freq === "3day") {
-    const base = lastDone ? addDays(lastDone, 3) : addDays(EPOCH, 0);
-    return Math.max(0, daysBetween(today, base));
+    let base;
+    if (chore.reschedules?.__anchor) {
+      base = parseDate(chore.reschedules.__anchor);
+    } else {
+      base = lastDone ? addDays(lastDone, 3) : addDays(EPOCH, 0);
+    }
+    if (base <= today) return 0;
+    return daysBetween(today, base);
   }
   if (["weekly","biweekly","triweekly"].includes(chore.freq)) {
     for (let i = 0; i <= interval * 2; i++) {
