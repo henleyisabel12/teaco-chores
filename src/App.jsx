@@ -9,7 +9,7 @@ import {
 import {
   todayDate, dateStr, parseDate, addDays, daysBetween, freqInterval,
   freqDisplayLabel, uid, getChoresForDate, isCompletedOnDate,
-  getNextDueDays, getPeriodKey, getCats, EPOCH,
+  getNextDueDays, getPeriodKey, getCats,
 } from "./scheduling";
 
 // Convert schedule array to object keyed by task id for Firebase storage.
@@ -46,6 +46,7 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(new Date(today));
   const [showDone,     setShowDone]    = useState(false);
   const [freqKeyOpen,  setFreqKeyOpen] = useState(false);
+  const [allViewMode,  setAllViewMode] = useState("freq"); // "freq" | "cat"
   const [editModal,    setEditModal]   = useState(null);
   const [addModal,     setAddModal]    = useState(false);
   const [userModal,    setUserModal]   = useState(false);
@@ -268,7 +269,7 @@ export default function App() {
         {/* Main content */}
         <div onClick={()=>toggleChore(chore.id,date)} style={{flex:1,cursor:"pointer"}}>
           <div style={{
-            fontSize: small?11:13,
+            fontSize: small?13:15,
             color: done?"rgba(255,255,255,0.28)":"rgba(255,255,255,0.82)",
             lineHeight:1.45, textDecoration: done?"line-through":"none",
           }}>{chore.task}</div>
@@ -470,9 +471,12 @@ export default function App() {
     const repeating = schedule.filter(c=>c.freq!=="once");
     const freqGroups = FREQ_OPTIONS.filter(k=>k!=="once");
 
+    // Build category view data
+    const allCatsInSchedule = [...new Set(schedule.flatMap(c => getCats(c)))].sort();
+
     return (
       <div style={{paddingBottom:60}}>
-        <div style={{display:"flex",gap:8,marginBottom:16}}>
+        <div style={{display:"flex",gap:8,marginBottom:10}}>
           <button onClick={()=>setAddModal(true)} style={{
             flex:1,background:"rgba(244,162,97,0.1)",border:"1px dashed rgba(244,162,97,0.4)",
             borderRadius:10,padding:"9px",cursor:"pointer",color:"#F4A261",fontFamily:"monospace",
@@ -484,6 +488,52 @@ export default function App() {
             fontFamily:"monospace",fontSize:11,letterSpacing:"0.1em",textTransform:"uppercase",
           }}>Categories</button>
         </div>
+        {/* View mode toggle */}
+        <div style={{display:"flex",gap:6,marginBottom:14}}>
+          {["freq","cat"].map(mode=>(
+            <button key={mode} onClick={()=>setAllViewMode(mode)} style={{
+              all:"unset",cursor:"pointer",padding:"5px 14px",borderRadius:6,
+              fontFamily:"monospace",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",
+              background:allViewMode===mode?"rgba(255,255,255,0.12)":"transparent",
+              color:allViewMode===mode?"rgba(255,255,255,0.8)":"rgba(255,255,255,0.3)",
+              border:allViewMode===mode?"1px solid rgba(255,255,255,0.2)":"1px solid transparent",
+              transition:"all 0.15s",
+            }}>{mode==="freq"?"By Frequency":"By Category"}</button>
+          ))}
+        </div>
+
+        {/* Category view */}
+        {allViewMode==="cat"&&(
+          <div>
+            {allCatsInSchedule.map(cat=>{
+              const chores = schedule.filter(c=>getCats(c).includes(cat));
+              const isOpen = collapsedFreqs["cat:"+cat]!==false;
+              return (
+                <div key={cat} style={{marginBottom:5}}>
+                  <button onClick={()=>setCollapsedFreqs(p=>({...p,["cat:"+cat]:!isOpen}))} style={{
+                    all:"unset",cursor:"pointer",width:"100%",boxSizing:"border-box",
+                    display:"flex",justifyContent:"space-between",alignItems:"center",
+                    background:"rgba(255,255,255,0.04)",border:"1px solid rgba(255,255,255,0.07)",
+                    borderRadius:10,padding:"8px 13px",marginBottom:isOpen?5:0,
+                  }}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <div style={{width:7,height:7,borderRadius:"50%",background:getCatColor(cat,catColors)}}/>
+                      <span style={{fontFamily:"monospace",fontSize:10,letterSpacing:"0.11em",textTransform:"uppercase",color:"rgba(255,255,255,0.42)"}}>{cat}</span>
+                    </div>
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                      <span style={{fontFamily:"monospace",fontSize:10,color:"rgba(255,255,255,0.2)"}}>{chores.length}</span>
+                      <span style={{color:"rgba(255,255,255,0.2)",fontSize:9}}>{isOpen?"▲":"▼"}</span>
+                    </div>
+                  </button>
+                  {isOpen&&chores.map(c=><AllChoreRow key={c.id} chore={c}/>)}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Frequency view */}
+        {allViewMode==="freq"&&<>
 
         {/* One-time tasks */}
         {onceTasks.length>0&&(
@@ -579,21 +629,32 @@ export default function App() {
       }}>
         <div style={{width:7,height:7,borderRadius:"50%",background:getCatColor(cats[0],catColors),marginTop:4,flexShrink:0}}/>
         <div style={{flex:1}}>
-          <div style={{fontSize:12,color:"rgba(255,255,255,0.75)",lineHeight:1.4}}>{chore.task}</div>
+          <div style={{fontSize:14,color:"rgba(255,255,255,0.75)",lineHeight:1.4}}>{chore.task}</div>
           <div style={{display:"flex",gap:6,marginTop:2,flexWrap:"wrap",alignItems:"center"}}>
             {cats.map(c=>(
               <span key={c} style={{fontSize:9,color:getCatColor(c,catColors),fontFamily:"monospace"}}>{c}</span>
             ))}
             {timeIcon&&<span style={{fontSize:10}}>{timeIcon}</span>}
             {chore.freq!=="daily"&&<span style={{fontSize:9,color:daysUntil===0?"#F4A261":"rgba(255,255,255,0.2)",fontFamily:"monospace"}}>
-              {isCur?"✓ done":daysUntil===0?"due now":daysUntil===1?"tmrw":`in ${daysUntil}d`}
+              {(()=>{
+                const longFreqs = ["triweekly","monthly","2month","3month","6month","annual","3year"];
+                const isLong = longFreqs.includes(chore.freq)||(typeof chore.freq==="string"&&chore.freq.startsWith("custom:"));
+                if(isCur) return "✓ done";
+                if(chore.freq==="once") return chore.onceDate||"";
+                if(daysUntil===0) return "due now";
+                if(isLong){
+                  const nextDate = addDays(today, daysUntil);
+                  return `${MONTHS[nextDate.getMonth()].slice(0,3)} ${nextDate.getDate()}`;
+                }
+                return daysUntil===1?"tmrw":`in ${daysUntil}d`;
+              })()}
               {chore.dow!=null&&chore.freq!=="once"&&` · ${DAYS_SHORT[chore.dow]}s`}
-              {chore.freq==="once"&&chore.onceDate&&` · ${chore.onceDate}`}
             </span>}
             {completedByUser&&<span style={{fontSize:9,fontFamily:"monospace",color:completedByUser.color}}>by {completedByUser.name}</span>}
           </div>
         </div>
         <button onClick={()=>setEditModal({chore,date:today})} style={{all:"unset",cursor:"pointer",fontSize:13,color:"rgba(255,255,255,0.2)",padding:"0 4px"}}>···</button>
+        </>}
       </div>
     );
   };
@@ -752,22 +813,23 @@ export default function App() {
                 const newD = parseDate(reschedDate);
                 const next = scheduleRef.current.map(c => {
                   if(c.id!==chore.id) return c;
+                  // Clear reschedules on/after this date
                   const kept = {};
                   Object.entries(c.reschedules||{}).forEach(([k,v])=>{
                     const d = parseDate(v);
                     if(d && d < newD) kept[k] = v;
                   });
                   if(["weekly","biweekly","triweekly"].includes(c.freq)) {
+                    // For weekly-type tasks: update dow to match new date's day of week.
+                    // For biweekly/triweekly also update weekOffset to match new date's week.
                     const newDow = newD.getDay();
                     const weekNum = Math.floor((newD - EPOCH) / (7 * 86400000));
                     const updated = {...c, dow: newDow, reschedules: kept};
                     if(c.freq==="biweekly") updated.weekOffset = weekNum % 2;
                     if(c.freq==="triweekly") updated.weekOffset = weekNum % 3;
-                    // Also reschedule the current period to the chosen date
-                    const pk = getPeriodKey(c, date, completions);
-                    updated.reschedules = {...updated.reschedules, [pk]: reschedDate};
                     return updated;
                   } else {
+                    // For monthly+: use __anchor
                     kept["__anchor"] = reschedDate;
                     return {...c, reschedules: kept};
                   }
@@ -841,49 +903,88 @@ export default function App() {
     if(!catModal) return null;
     const [editColors, setEditColors] = useState({...catColors});
     const [editCustom, setEditCustom] = useState([...customCats]);
+    const [editNames,  setEditNames]  = useState({}); // {oldName: newName}
     const [newCatName, setNewCatName] = useState("");
     const allEditable = [...new Set([...DEFAULT_CATS,...editCustom])].sort();
+
+    const FULL_PALETTE = [
+      "#7ECFC0","#F4A261","#C4A882","#B09EE8","#F0A0C0","#7BAFD4",
+      "#74C0FC","#9DC97A","#52B788","#F0C850","#90B8D8","#D4A5A5",
+      "#D4B84A","#E8C547","#FF8080","#A0C4FF","#BDB2FF","#CAFFBF",
+      "#FFD6A5","#FDFFB6","#9BF6FF","#FFB3C6","#FFC8DD","#CDB4DB",
+      "#B5EAD7","#E2F0CB","#FFDAC1","#FF9AA2","#C7CEEA","#B5D5C5",
+      "#A8DADC","#457B9D","#E63946","#2A9D8F","#E9C46A","#F4A261",
+    ];
 
     const addCat = () => {
       const t = newCatName.trim();
       if(!t||allEditable.includes(t)) return;
       setEditCustom(p=>[...p,t]);
-      // Assign a color from the palette
-      const idx = allEditable.length % PALETTE.length;
-      setEditColors(p=>({...p,[t]:PALETTE[idx]}));
+      const idx = allEditable.length % FULL_PALETTE.length;
+      setEditColors(p=>({...p,[t]:FULL_PALETTE[idx]}));
       setNewCatName("");
     };
     const deleteCat = (cat) => {
       setEditCustom(p=>p.filter(c=>c!==cat));
       setEditColors(p=>{const n={...p};delete n[cat];return n;});
     };
+    const handleSave = () => {
+      // Apply renames to schedule tasks and colors
+      let newColors = {...editColors};
+      let newCustom = [...editCustom];
+      let newSchedule = scheduleRef.current;
+      Object.entries(editNames).forEach(([oldName, newName]) => {
+        const trimmed = newName.trim();
+        if(!trimmed || trimmed === oldName) return;
+        // Rename in colors
+        if(newColors[oldName]) { newColors[trimmed] = newColors[oldName]; delete newColors[oldName]; }
+        // Rename in customCats
+        newCustom = newCustom.map(c => c===oldName ? trimmed : c);
+        // Rename in schedule tasks
+        newSchedule = newSchedule.map(c => {
+          const cats = getCats(c);
+          if(!cats.includes(oldName)) return c;
+          const updated = cats.map(x => x===oldName ? trimmed : x);
+          return {...c, cat: updated.length===1 ? updated[0] : updated};
+        });
+      });
+      setSchedule(newSchedule);
+      writeData("schedule", toIdObject(newSchedule));
+      saveCatColors(newColors, newCustom);
+    };
 
     return (
       <Modal onClose={()=>setCatModal(false)}>
         <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:18,color:"#f5f0e8",marginBottom:4}}>Manage Categories</div>
-        <p style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:"monospace",marginBottom:16,marginTop:0}}>Tap a color swatch to change it</p>
-        <div style={{maxHeight:"50vh",overflowY:"auto",marginBottom:12}}>
+        <p style={{fontSize:11,color:"rgba(255,255,255,0.35)",fontFamily:"monospace",marginBottom:16,marginTop:0}}>Edit name, pick color, or delete</p>
+        <div style={{maxHeight:"55vh",overflowY:"auto",marginBottom:12}}>
           {allEditable.map(cat=>{
             const col = editColors[cat]||DEFAULT_CAT_COLORS[cat]||"#888";
             const isCustom = !DEFAULT_CATS.includes(cat);
+            const displayName = editNames[cat] ?? cat;
             return (
-              <div key={cat} style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+              <div key={cat} style={{marginBottom:12,padding:"8px 10px",background:"rgba(255,255,255,0.03)",borderRadius:8,border:"1px solid rgba(255,255,255,0.06)"}}>
+                {/* Name + delete */}
+                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:7}}>
+                  <div style={{width:9,height:9,borderRadius:"50%",background:col,flexShrink:0}}/>
+                  <input
+                    value={displayName}
+                    onChange={e=>setEditNames(p=>({...p,[cat]:e.target.value}))}
+                    style={{...inputSt,flex:1,padding:"4px 8px",fontSize:12}}
+                  />
+                  {isCustom&&(
+                    <button onClick={()=>deleteCat(cat)} style={{all:"unset",cursor:"pointer",fontSize:16,color:"rgba(255,100,100,0.5)",padding:"0 4px",flexShrink:0}}>×</button>
+                  )}
+                </div>
                 {/* Color swatches */}
-                <div style={{display:"flex",gap:2,flexWrap:"wrap",width:80,flexShrink:0}}>
-                  {PALETTE.map(p=>(
+                <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+                  {FULL_PALETTE.map(p=>(
                     <div key={p} onClick={()=>setEditColors(prev=>({...prev,[cat]:p}))} style={{
-                      width:13,height:13,borderRadius:"50%",background:p,cursor:"pointer",
+                      width:16,height:16,borderRadius:"50%",background:p,cursor:"pointer",
                       border:col===p?"2px solid white":"1px solid transparent",flexShrink:0,
                     }}/>
                   ))}
                 </div>
-                {/* Preview dot + name */}
-                <div style={{width:10,height:10,borderRadius:"50%",background:col,flexShrink:0}}/>
-                <span style={{flex:1,fontSize:13,color:"rgba(255,255,255,0.75)"}}>{cat}</span>
-                {/* Delete button for custom cats only */}
-                {isCustom&&(
-                  <button onClick={()=>deleteCat(cat)} style={{all:"unset",cursor:"pointer",fontSize:16,color:"rgba(255,100,100,0.5)",padding:"0 4px"}}>×</button>
-                )}
               </div>
             );
           })}
@@ -895,7 +996,7 @@ export default function App() {
             placeholder="New category name…" style={{...inputSt,flex:1,padding:"6px 10px",fontSize:12}}/>
           <button onClick={addCat} style={{...primaryBtn,padding:"6px 12px",fontSize:11}}>Add</button>
         </div>
-        <button onClick={()=>saveCatColors(editColors,editCustom)} style={{...primaryBtn,width:"100%",boxSizing:"border-box"}}>Save</button>
+        <button onClick={handleSave} style={{...primaryBtn,width:"100%",boxSizing:"border-box"}}>Save</button>
       </Modal>
     );
   };
