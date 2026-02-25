@@ -36,9 +36,7 @@ export default function App() {
   const [completions, setCompletions] = useState({});
   const [users,       setUsers]       = useState(DEFAULT_USERS);
   const [activeUser,  setActiveUser]  = useState("A");
-  // catColors: { CategoryName: "#hexcolor" }
   const [catColors,   setCatColors]   = useState(DEFAULT_CAT_COLORS);
-  // customCats: extra user-created categories beyond defaults
   const [customCats,  setCustomCats]  = useState([]);
 
   const [view,         setView]        = useState("today");
@@ -46,27 +44,22 @@ export default function App() {
   const [selectedDate, setSelectedDate] = useState(new Date(today));
   const [showDone,     setShowDone]    = useState(false);
   const [freqKeyOpen,  setFreqKeyOpen] = useState(false);
-  const [allViewMode,  setAllViewMode] = useState("freq"); // "freq" | "cat"
+  const [allViewMode,  setAllViewMode] = useState("freq");
   const [editModal,    setEditModal]   = useState(null);
   const [addModal,     setAddModal]    = useState(false);
   const [userModal,    setUserModal]   = useState(false);
   const [catModal,     setCatModal]    = useState(false);
   const [collapsedFreqs, setCollapsedFreqs] = useState({});
   const [synced,       setSynced]      = useState(false);
-  const [sortOrder,    setSortOrder]   = useState({});  // {choreId: number}
+  const [sortOrder,    setSortOrder]   = useState({});
   const [reorderMode,  setReorderMode] = useState(false);
   const scheduleRef   = useRef(DEFAULT_SCHEDULE);
   const freqKeyRef = useRef(null);
 
-  // All known categories (defaults + custom)
   const allCats = [...new Set([...DEFAULT_CATS, ...customCats])].sort();
 
-  // Keep a ref to schedule so action functions always have the latest value
   useEffect(() => { scheduleRef.current = schedule; }, [schedule]);
 
-  // ── Firebase ───────────────────────────────────────────────────────────────
-  // Read once on mount. All writes happen explicitly inside action functions — never
-  // via useEffect — so there is no risk of stale state being written back to Firebase.
   useEffect(() => {
     const stored = localStorage.getItem("teaco-activeUser");
     if (stored) setActiveUser(stored);
@@ -101,7 +94,6 @@ export default function App() {
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
-  // ── Actions ────────────────────────────────────────────────────────────────
   const toggleChore = useCallback((choreId, date) => {
     const ds = dateStr(date);
     setCompletions(prev => {
@@ -133,13 +125,6 @@ export default function App() {
     writeData("schedule", toIdObject(next));
     setAddModal(false);
   };
-  const rescheduleChore = (chore, date, newDate) => {
-    const pk = getPeriodKey(chore, date, completions);
-    const next = scheduleRef.current.map(c => c.id!==chore.id ? c : {...c, reschedules:{...c.reschedules, [pk]:dateStr(newDate)}});
-    setSchedule(next);
-    writeData("schedule", toIdObject(next));
-    setEditModal(null);
-  };
   const saveCatColors = (newColors, newCustom) => {
     setCatColors(newColors);
     setCustomCats(newCustom);
@@ -149,21 +134,18 @@ export default function App() {
   };
 
   const reorderChores = (orderedIds) => {
-    // Assign sort values based on position in the new order
     const next = {...sortOrder};
     orderedIds.forEach((id, i) => { next[id] = i * 10; });
     setSortOrder(next);
     writeData("sortOrder", next);
   };
 
-  // ── Derived ────────────────────────────────────────────────────────────────
   const activeUserObj = users.find(u => u.id===activeUser) || users[0];
   const todayChores   = getChoresForDate(schedule, today, completions);
   const todayDone     = todayChores.filter(c => isCompletedOnDate(c, today, completions));
   const todayPending  = todayChores.filter(c => !isCompletedOnDate(c, today, completions));
   const pct = todayChores.length ? Math.round(100*todayDone.length/todayChores.length) : 100;
 
-  // Group by time-of-day, then category within each group
   function groupByTimeAndCat(chores) {
     const groups = {morning:[], afternoon:[], evening:[], anytime:[]};
     for (const c of chores) {
@@ -176,7 +158,6 @@ export default function App() {
     const byCat = {};
     for (const c of chores) {
       const cats = getCats(c);
-      // Use first cat as display group to avoid duplication
       const primary = cats[0];
       if (!byCat[primary]) byCat[primary] = [];
       byCat[primary].push(c);
@@ -184,7 +165,6 @@ export default function App() {
     return byCat;
   }
 
-  // Apply sortOrder to a list of chores
   function applyOrder(chores) {
     return [...chores].sort((a, b) => {
       const ao = sortOrder[a.id] ?? 9999;
@@ -193,7 +173,6 @@ export default function App() {
     });
   }
 
-  // Sort cats using CAT_ORDER then alpha
   function sortCats(catList) {
     return [...catList].sort((a,b) => {
       const ai = CAT_ORDER.indexOf(a), bi = CAT_ORDER.indexOf(b);
@@ -207,7 +186,6 @@ export default function App() {
   const pendingGroups = groupByTimeAndCat(todayPending);
   const TIME_DISPLAY_ORDER = ["morning","afternoon","evening","anytime"];
 
-  // ── Sub-components ─────────────────────────────────────────────────────────
   const CatHeader = ({cat}) => (
     <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}>
       <div style={{width:7,height:7,borderRadius:"50%",background:getCatColor(cat,catColors)}}/>
@@ -232,7 +210,6 @@ export default function App() {
         border:`1px solid ${done?"rgba(255,255,255,0.04)":"rgba(255,255,255,0.09)"}`,
         opacity: done ? 0.5 : 1, transition:"all 0.15s",
       }}>
-        {/* Reorder buttons — only in reorder mode */}
         {isReordering && (
           <div style={{display:"flex",flexDirection:"column",flexShrink:0,gap:1}}>
             <button onClick={onMoveUp} disabled={!onMoveUp} style={{
@@ -251,7 +228,6 @@ export default function App() {
             }}>▼</button>
           </div>
         )}
-        {/* Checkbox */}
         <div onClick={()=>toggleChore(chore.id,date)} style={{
           width:18, height:18, borderRadius:5, flexShrink:0, cursor:"pointer",
           border:`1.5px solid ${completedByUser?completedByUser.color:"rgba(255,255,255,0.2)"}`,
@@ -261,12 +237,10 @@ export default function App() {
         }}>
           {completedByUser && completedByUser.name.slice(0,1).toUpperCase()}
         </div>
-        {/* Freq dot */}
         <div title={freqDisplayLabel(chore.freq)} onClick={e=>{e.stopPropagation();setFreqKeyOpen(true);}} style={{
           width:7, height:7, borderRadius:"50%", background:freqCol,
           flexShrink:0, cursor:"pointer",
         }}/>
-        {/* Main content */}
         <div onClick={()=>toggleChore(chore.id,date)} style={{flex:1,cursor:"pointer"}}>
           <div style={{
             fontSize: small?13:15,
@@ -284,7 +258,6 @@ export default function App() {
             {timeIcon && <span style={{fontSize:10}}>{timeIcon}</span>}
           </div>
         </div>
-        {/* Edit — hidden in reorder mode */}
         {!isReordering && (
           <button onClick={()=>setEditModal({chore,date})} style={{
             all:"unset", cursor:"pointer", padding:"1px 5px", fontSize:13,
@@ -298,7 +271,6 @@ export default function App() {
     );
   };
 
-  // ── VIEWS ──────────────────────────────────────────────────────────────────
   const moveChore = (id, dir, orderedList) => {
     const ids = orderedList.map(c => c.id);
     const idx = ids.indexOf(id);
@@ -313,7 +285,6 @@ export default function App() {
 
   const TodayView = () => (
     <div style={{paddingBottom:60}}>
-      {/* Progress */}
       <div style={{background:"rgba(255,255,255,0.04)",borderRadius:14,padding:"15px 18px",marginBottom:20,border:"1px solid rgba(255,255,255,0.07)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:9}}>
           <span style={{fontFamily:"'Cormorant Garamond',serif",fontSize:18,color:"#f5f0e8"}}>{DAYS_FULL[today.getDay()]}, {MONTHS[today.getMonth()]} {today.getDate()}</span>
@@ -327,7 +298,6 @@ export default function App() {
         {pct===100&&<div style={{textAlign:"center",marginTop:8,color:"#7ECFC0",fontFamily:"'Cormorant Garamond',serif",fontSize:14,fontStyle:"italic"}}>✦ All done for today ✦</div>}
       </div>
 
-      {/* Reorder toggle — always visible below progress card */}
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}>
         <button onClick={()=>setReorderMode(p=>!p)} style={{
           all:"unset",cursor:"pointer",fontSize:11,fontFamily:"monospace",
@@ -338,7 +308,6 @@ export default function App() {
         }}>{reorderMode ? "✓ Done reordering" : "⇅ Reorder tasks"}</button>
       </div>
 
-      {/* All chores grouped by time then category — done ones stay in place */}
       {TIME_DISPLAY_ORDER.map(timeSlot => {
         const allInSlot = groupByTimeAndCat(todayChores)[timeSlot];
         if (!allInSlot || allInSlot.length===0) return null;
@@ -466,12 +435,9 @@ export default function App() {
   };
 
   const AllView = () => {
-    // Group "once" tasks separately
     const onceTasks = schedule.filter(c=>c.freq==="once");
     const repeating = schedule.filter(c=>c.freq!=="once");
     const freqGroups = FREQ_OPTIONS.filter(k=>k!=="once");
-
-    // Build category view data
     const allCatsInSchedule = [...new Set(schedule.flatMap(c => getCats(c)))].sort();
 
     return (
@@ -488,8 +454,9 @@ export default function App() {
             fontFamily:"monospace",fontSize:11,letterSpacing:"0.1em",textTransform:"uppercase",
           }}>Categories</button>
         </div>
-        {/* View mode toggle */}
-        <div style={{display:"flex",gap:6,marginBottom:14}}>
+
+        {/* View mode toggle + reorder button */}
+        <div style={{display:"flex",gap:6,marginBottom:14,alignItems:"center"}}>
           {["freq","cat"].map(mode=>(
             <button key={mode} onClick={()=>setAllViewMode(mode)} style={{
               all:"unset",cursor:"pointer",padding:"5px 14px",borderRadius:6,
@@ -500,6 +467,13 @@ export default function App() {
               transition:"all 0.15s",
             }}>{mode==="freq"?"By Frequency":"By Category"}</button>
           ))}
+          <button onClick={()=>setReorderMode(p=>!p)} style={{
+            all:"unset",cursor:"pointer",padding:"5px 12px",borderRadius:6,marginLeft:"auto",
+            fontFamily:"monospace",fontSize:10,letterSpacing:"0.08em",textTransform:"uppercase",
+            background:reorderMode?"rgba(244,162,97,0.25)":"rgba(255,255,255,0.07)",
+            border:reorderMode?"1px solid rgba(244,162,97,0.5)":"1px solid rgba(255,255,255,0.12)",
+            color:reorderMode?"#F4A261":"rgba(255,255,255,0.4)",transition:"all 0.15s",
+          }}>{reorderMode?"✓ Done":"⇅ Reorder"}</button>
         </div>
 
         {/* Category view */}
@@ -525,7 +499,14 @@ export default function App() {
                       <span style={{color:"rgba(255,255,255,0.2)",fontSize:9}}>{isOpen?"▲":"▼"}</span>
                     </div>
                   </button>
-                  {isOpen&&chores.map(c=><AllChoreRow key={c.id} chore={c}/>)}
+                  {isOpen&&applyOrder(chores).map((c,i,arr)=>(
+                    <AllChoreRow key={c.id} chore={c}
+                      dotColor={FREQ_COLOR[c.freq]||"#aaa"}
+                      showFreq
+                      onMoveUp={reorderMode&&i>0?()=>moveChore(c.id,"up",arr):null}
+                      onMoveDown={reorderMode&&i<arr.length-1?()=>moveChore(c.id,"down",arr):null}
+                    />
+                  ))}
                 </div>
               );
             })}
@@ -535,7 +516,6 @@ export default function App() {
         {/* Frequency view */}
         {allViewMode==="freq"&&<>
 
-        {/* One-time tasks */}
         {onceTasks.length>0&&(
           <div style={{marginBottom:5}}>
             <button onClick={()=>setCollapsedFreqs(p=>({...p,once:!p.once}))} style={{
@@ -553,11 +533,15 @@ export default function App() {
                 <span style={{color:"rgba(255,255,255,0.2)",fontSize:9}}>{collapsedFreqs.once?"▼":"▲"}</span>
               </div>
             </button>
-            {!collapsedFreqs.once&&onceTasks.map(c=><AllChoreRow key={c.id} chore={c}/>)}
+            {!collapsedFreqs.once&&applyOrder(onceTasks).map((c,i,arr)=>(
+              <AllChoreRow key={c.id} chore={c}
+                onMoveUp={reorderMode&&i>0?()=>moveChore(c.id,"up",arr):null}
+                onMoveDown={reorderMode&&i<arr.length-1?()=>moveChore(c.id,"down",arr):null}
+              />
+            ))}
           </div>
         )}
 
-        {/* Repeating tasks by frequency */}
         {freqGroups.map(key=>{
           const chores = repeating.filter(c=>c.freq===key);
           if(!chores.length) return null;
@@ -579,12 +563,16 @@ export default function App() {
                   <span style={{color:"rgba(255,255,255,0.2)",fontSize:9}}>{isOpen?"▲":"▼"}</span>
                 </div>
               </button>
-              {isOpen&&chores.map(c=><AllChoreRow key={c.id} chore={c}/>)}
+              {isOpen&&applyOrder(chores).map((c,i,arr)=>(
+                <AllChoreRow key={c.id} chore={c}
+                  onMoveUp={reorderMode&&i>0?()=>moveChore(c.id,"up",arr):null}
+                  onMoveDown={reorderMode&&i<arr.length-1?()=>moveChore(c.id,"down",arr):null}
+                />
+              ))}
             </div>
           );
         })}
 
-        {/* Custom frequencies */}
         {(()=>{
           const customFreqs = [...new Set(schedule.filter(c=>c.freq?.startsWith?.("custom:")).map(c=>c.freq))];
           return customFreqs.map(freq=>{
@@ -685,7 +673,6 @@ export default function App() {
 
   // ── MODALS ─────────────────────────────────────────────────────────────────
 
-  // Shared form state component for Add/Edit
   const ChoreForm = ({initial, onSave, onDelete, showDelete}) => {
     const [taskVal,    setTaskVal]    = useState(initial.task||"");
     const [catVals,    setCatVals]    = useState(initial.cats||["Misc"]);
@@ -731,7 +718,6 @@ export default function App() {
           <textarea value={taskVal} onChange={e=>setTaskVal(e.target.value)} style={inputSt} rows={2} placeholder="Describe the chore..."/>
         </Field>
 
-        {/* Categories — multi-select chips */}
         <div>
           <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",letterSpacing:"0.08em",textTransform:"uppercase",fontFamily:"monospace",marginBottom:6}}>
             Categories <span style={{color:"rgba(255,255,255,0.2)"}}>(select all that apply)</span>
@@ -758,7 +744,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* Frequency */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <Field label="Frequency">
             <select value={freqVal} onChange={e=>setFreqVal(e.target.value)} style={selectSt}>
@@ -826,7 +811,6 @@ export default function App() {
             </Field>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               <button onClick={()=>{
-                // Move just this occurrence — store in reschedules map
                 const pk = getPeriodKey(chore,date,completions);
                 const next = scheduleRef.current.map(c => c.id!==chore.id ? c : {...c, reschedules:{...c.reschedules,[pk]:reschedDate}});
                 setSchedule(next);
@@ -835,33 +819,36 @@ export default function App() {
               }} style={primaryBtn}>Move this occurrence only</button>
               <button onClick={()=>{
                 try {
-                const newD = parseDate(reschedDate);
-                const next = scheduleRef.current.map(c => {
-                  if(c.id!==chore.id) return c;
-                  const kept = {};
-                  Object.entries(c.reschedules||{}).forEach(([k,v])=>{
-                    const d = parseDate(v);
-                    if(d && d < newD) kept[k] = v;
+                  const newD = parseDate(reschedDate);
+                  const next = scheduleRef.current.map(c => {
+                    if(c.id!==chore.id) return c;
+                    // Clear reschedules on/after new date
+                    const kept = {};
+                    Object.entries(c.reschedules||{}).forEach(([k,v])=>{
+                      if(k==="__anchor") return;
+                      const d = parseDate(v);
+                      if(d && d < newD) kept[k] = v;
+                    });
+                    if(["weekly","biweekly","triweekly"].includes(c.freq)) {
+                      const newDow = newD.getDay();
+                      const msPerWeek = 7 * 24 * 60 * 60 * 1000;
+                      const epochMs = new Date("2024-01-07").getTime();
+                      const weekNum = Math.floor((newD.getTime() - epochMs) / msPerWeek);
+                      const interval = freqInterval(c.freq);
+                      // lastDone = (interval-1) days before newD so gap check passes on newD
+                      const newLastDone = dateStr(addDays(newD, -(interval - 1)));
+                      const updated = {...c, dow: newDow, lastDone: newLastDone, reschedules: kept};
+                      if(c.freq==="biweekly") updated.weekOffset = weekNum % 2;
+                      if(c.freq==="triweekly") updated.weekOffset = weekNum % 3;
+                      return updated;
+                    } else {
+                      kept["__anchor"] = reschedDate;
+                      return {...c, reschedules: kept};
+                    }
                   });
-                  if(["weekly","biweekly","triweekly"].includes(c.freq)) {
-                    const newDow = newD.getDay();
-                    const weekNum = Math.floor(daysBetween(parseDate("2024-01-07"), newD) / 7);
-                    const interval = freqInterval(c.freq);
-                    // Set lastDone to interval days before new date so gap check passes
-                    const newLastDone = dateStr(addDays(newD, -interval));
-                    const updated = {...c, dow: newDow, lastDone: newLastDone, reschedules: kept};
-                    if(c.freq==="biweekly") updated.weekOffset = weekNum % 2;
-                    if(c.freq==="triweekly") updated.weekOffset = weekNum % 3;
-                    return updated;
-                  } else {
-                    // For monthly+: use __anchor
-                    kept["__anchor"] = reschedDate;
-                    return {...c, reschedules: kept};
-                  }
-                });
-                setSchedule(next);
-                setEditModal(null);
-                writeData("schedule", toIdObject(next));
+                  setSchedule(next);
+                  setEditModal(null);
+                  writeData("schedule", toIdObject(next));
                 } catch(e) { alert("Error: " + e.message); }
               }} style={{...primaryBtn, background:"rgba(255,255,255,0.08)", color:"rgba(255,255,255,0.7)"}}>Move this & all future occurrences</button>
             </div>
@@ -890,7 +877,7 @@ export default function App() {
             const next = [...scheduleRef.current, newChore];
             setSchedule(next);
             setAddModal(false);
-                    writeData("schedule", toIdObject(next));
+            writeData("schedule", toIdObject(next));
           }}
           showDelete={false}
         />
@@ -929,7 +916,7 @@ export default function App() {
     if(!catModal) return null;
     const [editColors, setEditColors] = useState({...catColors});
     const [editCustom, setEditCustom] = useState([...customCats]);
-    const [editNames,  setEditNames]  = useState({}); // {oldName: newName}
+    const [editNames,  setEditNames]  = useState({});
     const [newCatName, setNewCatName] = useState("");
     const allEditable = [...new Set([...DEFAULT_CATS,...editCustom])].sort();
 
@@ -955,18 +942,14 @@ export default function App() {
       setEditColors(p=>{const n={...p};delete n[cat];return n;});
     };
     const handleSave = () => {
-      // Apply renames to schedule tasks and colors
       let newColors = {...editColors};
       let newCustom = [...editCustom];
       let newSchedule = scheduleRef.current;
       Object.entries(editNames).forEach(([oldName, newName]) => {
         const trimmed = newName.trim();
         if(!trimmed || trimmed === oldName) return;
-        // Rename in colors
         if(newColors[oldName]) { newColors[trimmed] = newColors[oldName]; delete newColors[oldName]; }
-        // Rename in customCats
         newCustom = newCustom.map(c => c===oldName ? trimmed : c);
-        // Rename in schedule tasks
         newSchedule = newSchedule.map(c => {
           const cats = getCats(c);
           if(!cats.includes(oldName)) return c;
@@ -990,7 +973,6 @@ export default function App() {
             const displayName = editNames[cat] ?? cat;
             return (
               <div key={cat} style={{marginBottom:12,padding:"8px 10px",background:"rgba(255,255,255,0.03)",borderRadius:8,border:"1px solid rgba(255,255,255,0.06)"}}>
-                {/* Name + delete */}
                 <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:7}}>
                   <div style={{width:9,height:9,borderRadius:"50%",background:col,flexShrink:0}}/>
                   <input
@@ -1002,7 +984,6 @@ export default function App() {
                     <button onClick={()=>deleteCat(cat)} style={{all:"unset",cursor:"pointer",fontSize:16,color:"rgba(255,100,100,0.5)",padding:"0 4px",flexShrink:0}}>×</button>
                   )}
                 </div>
-                {/* Color swatches */}
                 <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
                   {FULL_PALETTE.map(p=>(
                     <div key={p} onClick={()=>setEditColors(prev=>({...prev,[cat]:p}))} style={{
@@ -1015,7 +996,6 @@ export default function App() {
             );
           })}
         </div>
-        {/* Add new category */}
         <div style={{display:"flex",gap:6,marginBottom:14}}>
           <input value={newCatName} onChange={e=>setNewCatName(e.target.value)}
             onKeyDown={e=>e.key==="Enter"&&addCat()}
@@ -1047,7 +1027,6 @@ export default function App() {
     </>
   );
 
-  // ── LAYOUT ─────────────────────────────────────────────────────────────────
   return (
     <div style={{
       minHeight:"100vh",background:"#121110",color:"#f5f0e8",fontFamily:"'DM Sans',sans-serif",
@@ -1061,7 +1040,6 @@ export default function App() {
       {catModal &&<><div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:999}} onClick={()=>setCatModal(false)}/><CatModal/></>}
 
       <div style={{maxWidth:520,margin:"0 auto",padding:"0 16px"}}>
-        {/* Header */}
         <div style={{padding:"24px 0 16px",borderBottom:"1px solid rgba(255,255,255,0.07)",marginBottom:18}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div style={{display:"flex",alignItems:"baseline",gap:8}}>
@@ -1086,11 +1064,9 @@ export default function App() {
             Checking in as <span style={{color:activeUserObj.color}}>{activeUserObj.name}</span>
             {" · "}{pct===100?"✓ all done today":`${todayPending.length} left today`}
             {!synced&&<span style={{color:"rgba(255,255,255,0.2)",marginLeft:8}}>⟳ connecting…</span>}
-
           </div>
         </div>
 
-        {/* Nav */}
         <div style={{display:"flex",gap:3,marginBottom:22,background:"rgba(255,255,255,0.04)",borderRadius:11,padding:3}}>
           {[["today","Today"],["calendar","Calendar"],["all","All"]].map(([v,l])=>(
             <button key={v} onClick={()=>setView(v)} style={{
