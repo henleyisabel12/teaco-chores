@@ -832,7 +832,7 @@ export default function App() {
                     if(["weekly","biweekly","triweekly"].includes(c.freq)) {
                       const newDow = newD.getDay();
                       const msPerWeek = 7 * 24 * 60 * 60 * 1000;
-                      const epochMs = new Date("2024-01-07").getTime();
+                      const epochMs = new Date("2026-02-22").getTime();
                       const weekNum = Math.floor((newD.getTime() - epochMs) / msPerWeek);
                       const interval = freqInterval(c.freq);
                       // lastDone = (interval-1) days before newD so gap check passes on newD
