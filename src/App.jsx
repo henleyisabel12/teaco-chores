@@ -660,7 +660,6 @@ export default function App() {
           </div>
         </div>
         <button onClick={()=>setEditModal({chore,date:today})} style={{all:"unset",cursor:"pointer",fontSize:13,color:"rgba(255,255,255,0.2)",padding:"0 4px"}}>···</button>
-        </>}
       </div>
     );
   };
