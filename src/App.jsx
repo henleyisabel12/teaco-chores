@@ -858,6 +858,8 @@ export default function App() {
                     return {...c, reschedules: kept};
                   }
                 });
+                const changed = next.find(c=>c.id===chore.id);
+                alert("dow:" + changed?.dow + " weekOffset:" + changed?.weekOffset + " anchor:" + changed?.reschedules?.__anchor);
                 setSchedule(next);
                 setEditModal(null);
                 writeData("schedule", toIdObject(next));
