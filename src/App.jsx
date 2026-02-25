@@ -844,11 +844,12 @@ export default function App() {
                     if(d && d < newD) kept[k] = v;
                   });
                   if(["weekly","biweekly","triweekly"].includes(c.freq)) {
-                    // For weekly-type tasks: update dow to match new date's day of week.
-                    // For biweekly/triweekly also update weekOffset to match new date's week.
                     const newDow = newD.getDay();
                     const weekNum = Math.floor(daysBetween(parseDate("2024-01-07"), newD) / 7);
-                    const updated = {...c, dow: newDow, reschedules: kept};
+                    const interval = freqInterval(c.freq);
+                    // Set lastDone to interval days before new date so gap check passes
+                    const newLastDone = dateStr(addDays(newD, -interval));
+                    const updated = {...c, dow: newDow, lastDone: newLastDone, reschedules: kept};
                     if(c.freq==="biweekly") updated.weekOffset = weekNum % 2;
                     if(c.freq==="triweekly") updated.weekOffset = weekNum % 3;
                     return updated;
@@ -858,8 +859,6 @@ export default function App() {
                     return {...c, reschedules: kept};
                   }
                 });
-                const changed = next.find(c=>c.id===chore.id);
-                alert("dow:" + changed?.dow + " weekOffset:" + changed?.weekOffset + " anchor:" + changed?.reschedules?.__anchor);
                 setSchedule(next);
                 setEditModal(null);
                 writeData("schedule", toIdObject(next));
