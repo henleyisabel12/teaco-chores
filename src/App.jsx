@@ -525,7 +525,7 @@ export default function App() {
                       <span style={{color:"rgba(255,255,255,0.2)",fontSize:9}}>{isOpen?"▲":"▼"}</span>
                     </div>
                   </button>
-                  {isOpen&&chores.map(c=><AllChoreRow key={c.id} chore={c} dotColor={FREQ_COLOR[c.freq]||"#aaa"}/>)}
+                  {isOpen&&chores.map(c=><AllChoreRow key={c.id} chore={c} dotColor={FREQ_COLOR[c.freq]||"#aaa"} showFreq/>)}
                 </div>
               );
             })}
@@ -615,7 +615,7 @@ export default function App() {
   };
 
   // Row used in All view
-  const AllChoreRow = ({chore, dotColor}) => {
+  const AllChoreRow = ({chore, dotColor, showFreq}) => {
     const daysUntil = getNextDueDays(chore, completions);
     const isCur = isCompletedOnDate(chore, today, completions);
     const completion = completions[chore.id];
@@ -632,9 +632,12 @@ export default function App() {
         <div style={{flex:1}}>
           <div style={{fontSize:14,color:"rgba(255,255,255,0.75)",lineHeight:1.4}}>{chore.task}</div>
           <div style={{display:"flex",gap:6,marginTop:2,flexWrap:"wrap",alignItems:"center"}}>
-            {cats.map(c=>(
-              <span key={c} style={{fontSize:9,color:getCatColor(c,catColors),fontFamily:"monospace"}}>{c}</span>
-            ))}
+            {showFreq
+              ? <span style={{fontSize:9,color:FREQ_COLOR[chore.freq]||"#aaa",fontFamily:"monospace"}}>{freqDisplayLabel(chore.freq)}</span>
+              : cats.map(c=>(
+                <span key={c} style={{fontSize:9,color:getCatColor(c,catColors),fontFamily:"monospace"}}>{c}</span>
+              ))
+            }
             {timeIcon&&<span style={{fontSize:10}}>{timeIcon}</span>}
             {chore.freq!=="daily"&&<span style={{fontSize:9,color:daysUntil===0?"#F4A261":"rgba(255,255,255,0.2)",fontFamily:"monospace"}}>
               {(()=>{
