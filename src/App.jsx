@@ -847,7 +847,7 @@ export default function App() {
                     // For weekly-type tasks: update dow to match new date's day of week.
                     // For biweekly/triweekly also update weekOffset to match new date's week.
                     const newDow = newD.getDay();
-                    const weekNum = Math.floor((newD - EPOCH) / (7 * 86400000));
+                    const weekNum = Math.floor(daysBetween(parseDate("2024-01-07"), newD) / 7);
                     const updated = {...c, dow: newDow, reschedules: kept};
                     if(c.freq==="biweekly") updated.weekOffset = weekNum % 2;
                     if(c.freq==="triweekly") updated.weekOffset = weekNum % 3;
