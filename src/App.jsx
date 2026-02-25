@@ -604,11 +604,17 @@ export default function App() {
                   </div>
                   <span style={{color:"rgba(255,255,255,0.2)",fontSize:9}}>{isOpen?"▲":"▼"}</span>
                 </button>
-                {isOpen&&chores.map(c=><AllChoreRow key={c.id} chore={c}/>)}
+                {isOpen&&applyOrder(chores).map((c,i,arr)=>(
+                  <AllChoreRow key={c.id} chore={c}
+                    onMoveUp={reorderMode&&i>0?()=>moveChore(c.id,"up",arr):null}
+                    onMoveDown={reorderMode&&i<arr.length-1?()=>moveChore(c.id,"down",arr):null}
+                  />
+                ))}
               </div>
             );
           });
         })()}
+        </>}
       </div>
     );
   };
